@@ -302,3 +302,5 @@ app/fixtures/attribution_gold_pdnc_winniethepooh.json
 
 # The 28 PDNC novel texts copied alongside them for the same run.
 ab_test_runtime/pdnc_hard/
+annotated_script.json.threepass_checkpoint.json
+annotated_script.json.threepass_manifest.json
