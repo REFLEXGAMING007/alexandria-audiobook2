@@ -1069,7 +1069,11 @@
                                             <input class="form-check-input" type="checkbox" id="tp-unquoted-must-be-narrator" checked>
                                             <label class="form-check-label" for="tp-unquoted-must-be-narrator">Unquoted must be Narrator</label>
                                         </div>
-                                        <div class="form-text">Turn either off to let the Step 1 model decide that case. In Auto, this also sends quote-marked chunks to the model. All source-loss, ordering, duplication, Unicode, schema, and size checks stay active. Quote marks only and Quote-aware remain deterministic.</div>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="tp-attribute-skip-attestation-check">
+                                            <label class="form-check-label" for="tp-attribute-skip-attestation-check">Allow unattested speakers (background chars)</label>
+                                        </div>
+                                        <div class="form-text">Turn either off to let the Step 1 model decide that case. In Auto, this also sends quote-marked chunks to the model. All source-loss, ordering, duplication, Unicode, schema, and size checks stay active. Quote marks only and Quote-aware remain deterministic. <strong>Allow unattested speakers</strong> disables the gate that rejects speakers not capitalized at least twice in the source text (use for generic roles like STUDENT_MALE_01, SHOPKEEPER_FEMALE_03).</div>
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label small mb-1" for="tp-segment-temperature">Segment temperature</label>

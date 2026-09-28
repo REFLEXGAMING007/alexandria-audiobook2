@@ -148,6 +148,8 @@ def resolve_three_pass_generation_settings(config, chunk_size_override=None,
             "three_pass_quoted_must_be_spoken", True) is not False,
         "unquoted_must_be_narrator": gen.get(
             "three_pass_unquoted_must_be_narrator", True) is not False,
+        "attribute_skip_attestation_check": gen.get(
+            "three_pass_attribute_skip_attestation_check", False) is not False,
         "attribute_batch_size": int(gen.get("three_pass_attribute_batch_size", BATCH_SIZE)),
         "attribute_context_chars": int(gen.get("three_pass_attribute_context_chars", 2000)),
         "attribute_prompt_variant": gen.get("three_pass_attribute_prompt_variant") or "michel2_full",
@@ -362,18 +364,22 @@ ATTRIBUTION_RESPONSE_SCHEMA = {
 def attribute_batch(client, model_name, frozen_batch, params, roster,
                     max_retries=3, on_exhaustion="fail", neighbor_contexts=None,
                     attempt_observer=None, source_text=None,
-                    exhaustion_sink=None, entries_provider=None, surround=None):
+                    exhaustion_sink=None, entries_provider=None, surround=None,
+                    attribute_skip_attestation_check=False):
     """Assign speakers to one batch of frozen {type,text} entries. Enforces the
     text freeze; retries on invalid output. On exhaustion: 'fail' raises
     PassExhausted (testing default); 'fallback' keeps frozen text and labels
-    unresolved SPOKEN spans UNKNOWN via stabilize_speaker_identities."""
+    unresolved SPOKEN spans UNKNOWN via stabilize_speaker_identities.
+    attribute_skip_attestation_check disables the fidelity gate that rejects
+    speakers not attested in the source text."""
     sys_prompt, user_prompt = build_attribute_request(
         frozen_batch, params, roster, neighbor_contexts, surround)
     validated = {}
 
     def validate(entries):
         validated["last"] = entries
-        report = validate_attribution(frozen_batch, entries, source_text)
+        report = validate_attribution(frozen_batch, entries, source_text,
+                                      skip_attestation_check=attribute_skip_attestation_check)
         if report["passed"]:
             validated["ordered"] = index_head_check(frozen_batch, entries)[2]
         return report
@@ -1404,7 +1410,7 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
                    vote_temperature=0.3, first_person_narrator=None,
                    attribute_batch_size=BATCH_SIZE, attribute_context_chars=0,
                    attribute_prompt_variant="default", attribute_prompt_texts=None,
-                   planned_calls=None):
+                   planned_calls=None, attribute_skip_attestation_check=False):
     """Full flow. Returns the assembled [{speaker,text,instruct}] list, or raises
     RuntimeError if pass 1 exhausts a chunk. first_person_narrator optionally
     seeds that exact character into the pass-2 roster. When output_path is given, saves a
@@ -1418,7 +1424,8 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
     and attribute_prompt_texts is the active preset's {"system", "user",
     "example"} (None = the variant's builtin texts). A preset with edited
     text is sent through the variant provider for every variant, default
-    included, so what Setup shows is what the model gets."""
+    included, so what Setup shows is what the model gets. attribute_skip_attestation_check
+    disables the fidelity gate that rejects speakers not attested in the source text."""
     unavailable_passes = set()
     entries_provider = None
     if (attribute_prompt_variant and attribute_prompt_variant != "default") or attribute_prompt_texts:
@@ -1702,7 +1709,8 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
                             "attribute", attempt),
                         exhaustion_sink=exhausted,
                         source_text=source_text, surround=surround,
-                        entries_provider=entries_provider)
+                        entries_provider=entries_provider,
+                        attribute_skip_attestation_check=attribute_skip_attestation_check)
                 except PassExhausted:
                     if len(current) == 1:
                         if collect_all_failures:
@@ -2247,6 +2255,7 @@ def main():
                             else generation_settings["attribute_batch_size"])
     attribute_context_chars = (args.attribute_context_chars if args.attribute_context_chars is not None
                                else generation_settings["attribute_context_chars"])
+    attribute_skip_attestation_check = generation_settings.get("attribute_skip_attestation_check", False)
     if attribute_batch_size < 1 or attribute_context_chars < 0:
         raise SystemExit("attribute batch size must be >= 1 and context chars >= 0")
     base_url = llm.get("base_url", "http://localhost:1234/v1")
@@ -2356,7 +2365,8 @@ def main():
                     context_windows=context_windows,
                     context_rescue_retries=context_rescue_retries,
                     endpoint=base_url,
-                    first_person_narrator=narrator)
+                    first_person_narrator=narrator,
+                    attribute_skip_attestation_check=attribute_skip_attestation_check)
                 atomic_json_write(sample_entries, sample_out)
                 summary["samples"].append({"label": label, "chunk_index": index,
                                            "status": "complete",
@@ -2385,7 +2395,8 @@ def main():
                                  attribute_batch_size=attribute_batch_size,
                                  attribute_context_chars=attribute_context_chars,
                                  attribute_prompt_variant=attribute_prompt_variant,
-                                 attribute_prompt_texts=attribute_prompt_texts)
+                                 attribute_prompt_texts=attribute_prompt_texts,
+                                 attribute_skip_attestation_check=attribute_skip_attestation_check)
     except (RuntimeError, PassExhausted) as exc:
         print(f"Error: {exc}")
         sys.exit(1)

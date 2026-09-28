@@ -146,6 +146,7 @@ class GenerationConfig(BaseModel):
     three_pass_segmentation: SegmentationMode = "auto"
     three_pass_quoted_must_be_spoken: bool = True
     three_pass_unquoted_must_be_narrator: bool = True
+    three_pass_attribute_skip_attestation_check: bool = False
     three_pass_model_profiles: Dict[str, ThreePassModelProfile] = Field(default_factory=dict)
 
 
