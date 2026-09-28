@@ -136,6 +136,7 @@ class GenerationConfig(BaseModel):
     # variants x bases"); 0 is what the pre-2026-09-19 scores were taken with.
     three_pass_attribute_batch_size: int = Field(default=25, ge=5, le=3000)
     three_pass_instruct_batch_size: int = Field(default=25, ge=5, le=3000)
+    three_pass_attribute_context_chars: int = Field(default=2000, ge=0, le=500000)
     # Which way the attribution question is asked (attribution_prompt_variants;
     # measured results per variant in RECIPES.md). michel2_full since
     # 2026-09-19, when Muse's cell (90.5 vs michel2 86.6) made it the winner
