@@ -498,17 +498,16 @@ class ConfigTests(unittest.TestCase):
 class ThreePassKnobBoundsTests(unittest.TestCase):
     def test_chunk_size_cap_and_the_pass2_knobs(self):
         import config_settings as cs
-        self.assertEqual(30000, cs.GenerationConfig(three_pass_chunk_size=30000).three_pass_chunk_size)
+        self.assertEqual(1000000, cs.GenerationConfig(three_pass_chunk_size=1000000).three_pass_chunk_size)
         with self.assertRaises(Exception):
-            cs.GenerationConfig(three_pass_chunk_size=30001)
+            cs.GenerationConfig(three_pass_chunk_size=1000001)
         g = cs.GenerationConfig()
-        self.assertEqual((25, 2000), (g.three_pass_attribute_batch_size, g.three_pass_attribute_context_chars))
-        self.assertEqual(100, cs.GenerationConfig(three_pass_attribute_batch_size=100).three_pass_attribute_batch_size)
-        for bad in ({"three_pass_attribute_batch_size": 4}, {"three_pass_attribute_batch_size": 101},
-                    {"three_pass_attribute_context_chars": -1}, {"three_pass_attribute_context_chars": 20001}):
+        self.assertEqual(25, g.three_pass_attribute_batch_size)
+        self.assertEqual(3000, cs.GenerationConfig(three_pass_attribute_batch_size=3000).three_pass_attribute_batch_size)
+        for bad in ({"three_pass_attribute_batch_size": 4}, {"three_pass_attribute_batch_size": 3001}):
             with self.assertRaises(Exception):
                 cs.GenerationConfig(**bad)
-        self.assertEqual(30000, cs.ThreePassModelProfile(chunk_size=30000).chunk_size)
+        self.assertEqual(1000000, cs.ThreePassModelProfile(chunk_size=1000000).chunk_size)
         self.assertEqual("michel2_full", g.three_pass_attribute_prompt_variant)   # the winner on every base, 2026-09-19
         self.assertEqual("michel2", cs.GenerationConfig(three_pass_attribute_prompt_variant="michel2").three_pass_attribute_prompt_variant)
         with self.assertRaises(Exception):

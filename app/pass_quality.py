@@ -582,12 +582,14 @@ def is_attested_name(name, source_text, min_attestations=MIN_NAME_ATTESTATIONS):
 
 
 def validate_attribution(frozen_entries, response_entries, source_text=None,
-                         known_names=None):
+                         known_names=None, skip_attestation_check=False):
     """Pass 2 gate. Verifies the index+head alignment, then requires every SPOKEN
     span to have a non-empty speaker other than NARRATOR, and every NARRATOR span
     to stay NARRATOR. `known_names` (a supplied cast, upper-case) skips only the
     speaker_not_in_source check: a cast list may name a character the text never
-    capitalises ("THE STRANGER") or names once ("SILAS DURGAN")."""
+    capitalises ("THE STRANGER") or names once ("SILAS DURGAN").
+    skip_attestation_check disables the fidelity gate that rejects speakers not
+    attested in the source text."""
     known_names = known_names or frozenset()
     ok, reason, ordered = index_head_check(frozen_entries, response_entries)
     if not ok:
@@ -606,7 +608,8 @@ def validate_attribution(frozen_entries, response_entries, source_text=None,
             # present in 8 of 9 books measured. UNKNOWN is deliberately not
             # rejected here: it is the placeholder stabilize_speaker_identities
             # assigns for genuinely unresolved speakers.
-            if (source_text and speaker
+            if (not skip_attestation_check
+                    and source_text and speaker
                     and speaker.upper() not in ("UNKNOWN", "NARRATOR")
                     and speaker.upper() not in known_names
                     and not is_attested_name(speaker, source_text)):
