@@ -304,3 +304,5 @@ app/fixtures/attribution_gold_pdnc_winniethepooh.json
 ab_test_runtime/pdnc_hard/
 # Pass-1 checkpoints for all 28 PDNC books, regenerated 2026-09-27 (DeepSeek, today's pass-1 code).
 ab_test_runtime/pdnc_hard28/
+annotated_script.json.threepass_checkpoint.json
+annotated_script.json.threepass_manifest.json

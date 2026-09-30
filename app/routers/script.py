@@ -796,7 +796,8 @@ def get_active_reasoning_effort() -> Optional[str]:
 def build_generate_script_command(input_file: str, output_path: Optional[str] = None,
                                   strip_front_matter: bool = True,
                                   first_person_narrator: Optional[str] = None,
-                                  reasoning_effort: Optional[str] = None) -> List[str]:
+                                  reasoning_effort: Optional[str] = None,
+                                  instruct_batch_size: Optional[int] = None) -> List[str]:
     """Build the one production command used by single and batch generation.
 
     `reasoning_effort` is passed explicitly so three_pass_generate records it
@@ -808,6 +809,8 @@ def build_generate_script_command(input_file: str, output_path: Optional[str] = 
         command.extend(["--output", output_path])
     if reasoning_effort:
         command.extend(["--reasoning-effort", reasoning_effort])
+    if instruct_batch_size is not None:
+        command.extend(["--instruct-batch-size", str(instruct_batch_size)])
     if not strip_front_matter:
         command.append("--no-strip-front-matter")
     narrator = get_valid_narrator_name(first_person_narrator)
@@ -912,6 +915,8 @@ def start_script_generation(background_tasks: BackgroundTasks, input_file: str,
             status_code=409,
             detail="No failed or incomplete three-pass generation is available to resume.")
     check_global_gpu_lock("script")
+    config = load_app_config(CONFIG_PATH)
+    generation_settings = resolve_three_pass_generation_settings(config)
     if not require_recovery:
         try:
             refusal = three_pass_refusal([{
@@ -934,6 +939,7 @@ def start_script_generation(background_tasks: BackgroundTasks, input_file: str,
             strip_front_matter=options["strip_front_matter"],
             first_person_narrator=options["first_person_narrator"],
             reasoning_effort=get_active_reasoning_effort(),
+            instruct_batch_size=generation_settings.get("instruct_batch_size"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1875,11 +1881,15 @@ def _run_batch_script_job(job, state, log_path, total):
     env = os.environ.copy()
     if state.get("run_id"):
         env["ALEXANDRIA_RUN_ID"] = state["run_id"]
+    config = load_app_config(CONFIG_PATH)
+    gen = config.get("generation") or {}
+    instruct_batch_size = gen.get("three_pass_instruct_batch_size")
     command = build_generate_script_command(
         job["input_path"], output_path=job["output_path"],
         strip_front_matter=job.get("strip_front_matter", True),
         first_person_narrator=job.get("first_person_narrator"),
         reasoning_effort=get_active_reasoning_effort(),
+        instruct_batch_size=instruct_batch_size,
     )
     rc, _ = _stream_subprocess_to_logs(
         command, BASE_DIR, state, log_prefix=f"[{index + 1}] ",
