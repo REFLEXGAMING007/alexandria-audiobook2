@@ -6,7 +6,7 @@ import os
 import re
 import signal
 import sys
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -52,6 +52,14 @@ from utils import (
     secure_filename,
 )
 from persona_validation import validate_persona_payload
+from character_registry import (
+    CHARACTER_REGISTRY_PATH,
+    ensure_character_registry,
+    load_character_registry,
+    is_character_registry_current,
+    build_character_registry,
+    save_character_registry,
+)
 
 
 logger = logging.getLogger("AlexandriaUI")
@@ -202,22 +210,76 @@ def _require_script_speaker(speaker):
         raise HTTPException(status_code=404, detail="Speaker is not present in the active script")
 
 
+def _load_script_entries() -> List[Dict[str, Any]]:
+    """Load the current annotated script entries."""
+    if not os.path.exists(SCRIPT_PATH):
+        return []
+    try:
+        with open(SCRIPT_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, ValueError) as e:
+        _warn_corrupted_json("script", SCRIPT_PATH, "returning empty list", e)
+        return []
+
+
+def _load_or_build_registry(script_entries: List[Dict[str, Any]],
+                            voice_config: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """Load or rebuild the character registry for the current script.
+
+    Returns the registry dict, or None if unavailable/failed.
+    """
+    if not script_entries:
+        return None
+
+    # Extract cast names from voice_config (all keys with voice assignments, excluding special speakers)
+    cast_names = None
+    if voice_config:
+        cast_names = {k.upper() for k in voice_config.keys()
+                      if k.upper() not in ("NARRATOR", "UNKNOWN")}
+
+    # Try to load existing registry
+    registry = load_character_registry()
+
+    # Check if registry is current
+    if registry and is_character_registry_current(registry, script_entries):
+        return registry
+
+    # Registry missing or stale - try to rebuild
+    logger.info("Character registry missing or stale; rebuilding...")
+    try:
+        # Build registry with cast names from voice config
+        registry = build_character_registry(script_entries, cast_names=cast_names)
+        save_character_registry(registry)
+        logger.info("Character registry rebuilt successfully")
+        return registry
+    except Exception as e:
+        logger.warning(f"Character registry rebuild failed: {e}")
+        return None
+
+
+def _order_states_by_first_appearance(states: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Order states by first appearance (first_line), then lexicographically."""
+    ordered = []
+    for state_key, state in states.items():
+        state_copy = dict(state)
+        state_copy["state_key"] = state_key
+        ordered.append(state_copy)
+    ordered.sort(key=lambda s: (s.get("first_line", 999999), s.get("state_key", "")))
+    return ordered
+
+
 @router.get("/api/voices")
 async def get_voices():
     # Parse voices directly from the current script (no stale cache)
+    script_entries = _load_script_entries()
     voices_list = []
-    if os.path.exists(SCRIPT_PATH):
-        try:
-            with open(SCRIPT_PATH, "r", encoding="utf-8") as f:
-                script_data = json.load(f)
-            voices_set = set()
-            for entry in script_data:
-                speaker = (entry.get("speaker") or entry.get("type") or "").strip()
-                if speaker:
-                    voices_set.add(speaker)
-            voices_list = sorted(voices_set)
-        except (json.JSONDecodeError, ValueError) as e:
-            _warn_corrupted_json("script", SCRIPT_PATH, "returning empty voice list", e)
+    for entry in script_entries:
+        speaker = (entry.get("speaker") or entry.get("type") or "").strip()
+        if speaker:
+            voices_list.append(speaker)
+    # Deduplicate while preserving first-appearance order
+    seen = set()
+    voices_list = [v for v in voices_list if not (v in seen or seen.add(v))]
 
     if not voices_list:
         return []
@@ -235,14 +297,41 @@ async def get_voices():
     missing_speakers = {voice_name for voice_name in voices_list
                         if not voice_is_set(voice_config.get(voice_name))}
 
+    # Load or build character registry
+    registry = _load_or_build_registry(script_entries, voice_config)
+
     result = []
     for voice_name in voices_list:
         config = voice_config.get(voice_name, {})
-        result.append({
+
+        # Build base response (backward compatible)
+        voice_card = {
             "name": voice_name,
             "config": config,
             "persona_pending": voice_name in missing_speakers
-        })
+        }
+
+        # Add character registry metadata if available
+        if registry and "characters" in registry:
+            char_data = registry["characters"].get(voice_name)
+            if char_data:
+                voice_card["character_type"] = char_data.get("character_type")
+                voice_card["display_name"] = char_data.get("display_name")
+
+                # Add assignable flag if present (e.g., UNKNOWN)
+                if "assignable" in char_data:
+                    voice_card["assignable"] = char_data["assignable"]
+
+                # Add states
+                states = char_data.get("states", {})
+                if states:
+                    ordered_states = _order_states_by_first_appearance(states)
+                    voice_card["states"] = ordered_states
+                else:
+                    voice_card["states"] = []
+
+        result.append(voice_card)
+
     return result
 
 
