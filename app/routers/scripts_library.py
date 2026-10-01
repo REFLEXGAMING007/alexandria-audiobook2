@@ -26,7 +26,8 @@ from script_repair import build_deterministic_repair
 from speaker_repair import apply_speaker_selections, build_speaker_review
 from content_repair import apply_content_selections, build_content_review
 from utils import (atomic_json_write, backup_file_with_timestamp, file_lock,
-                   is_generic_speaker, safe_load_json)
+                    is_generic_speaker, safe_load_json)
+from character_registry import ensure_character_registry
 
 
 logger = logging.getLogger("AlexandriaUI")
@@ -131,6 +132,15 @@ async def load_script(request: ScriptLoadRequest):
     # validates only batch_size/context_window), so a resume after this load would
     # otherwise splice the old book's corrected entries into the one just loaded.
     clear_checkpoint(SCRIPT_PATH)
+
+    # Build/load the Character Registry for the loaded script
+    try:
+        entries = safe_load_json(SCRIPT_PATH, [])
+        if isinstance(entries, list) and entries:
+            ensure_character_registry(entries)
+            logger.info(f"Character registry built for loaded script '{request.name}'")
+    except Exception as e:
+        logger.warning(f"Character registry build failed for loaded script: {e}")
 
     logger.info(f"Script '{request.name}' loaded")
     return {"status": "loaded", "name": request.name}

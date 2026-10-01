@@ -47,7 +47,8 @@ from config_settings import load_app_config
 from lmstudio_settings import (ensure_ideal_settings, get_active_llm_config,
                                get_effective_max_tokens, TokenBudgetError)
 from utils import (get_runtime_data_dir, get_app_config_path,
-                   atomic_json_write, safe_load_json, is_nonverbal_text)
+                    atomic_json_write, safe_load_json, is_nonverbal_text)
+from character_registry import ensure_character_registry
 
 BATCH_SIZE = 25
 NARRATOR_DEFAULT_INSTRUCT = "Neutral, even narration."
@@ -2603,6 +2604,14 @@ first_person_narrator=narrator,
     if chunks_path is not None and os.path.exists(chunks_path):
         os.remove(chunks_path)
         print("Cleared old chunks.json")
+
+    # Build/update the Character Registry from the completed annotated script
+    try:
+        ensure_character_registry(entries)
+        print("Character registry updated.")
+    except Exception as e:
+        # Registry is derived metadata - log error but don't fail the generation
+        print(f"Warning: Character registry update failed: {e}")
 
 
 if __name__ == "__main__":
