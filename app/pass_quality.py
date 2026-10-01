@@ -596,6 +596,8 @@ def validate_attribution(frozen_entries, response_entries, source_text=None,
         return {"passed": False,
                 "findings": [{"code": "alignment_violated", "message": reason}]}
     findings = []
+    VALID_GENDERS = {"MALE", "FEMALE", "UNSPECIFIED"}
+    VALID_AGE_GROUPS = {"CHILD", "TEEN", "YOUNG_ADULT", "ADULT", "MIDDLE_AGED", "ELDERLY", "AGELESS", "UNSPECIFIED"}
     for i, (frozen, item) in enumerate(zip(frozen_entries, ordered), 1):
         source_line = frozen.get("text", "")
         raw_speaker = strip_roster_alias_echo(item.get("speaker"))
@@ -644,6 +646,24 @@ def validate_attribution(frozen_entries, response_entries, source_text=None,
                                  "source_line": source_line,
                                  "expected": _VALIDATION_EXPECTED["spoken_not_named"],
                                  "message": "A spoken line was not assigned a character name."})
+            # Validate gender metadata
+            gender = item.get("gender")
+            if not isinstance(gender, str) or gender.upper() not in VALID_GENDERS:
+                findings.append({"code": "invalid_gender" if gender else "missing_gender",
+                                 "entry_number": i,
+                                 "value": gender,
+                                 "source_line": source_line,
+                                 "expected": "One of: MALE, FEMALE, UNSPECIFIED",
+                                 "message": f"Spoken entry must have a valid gender: {', '.join(sorted(VALID_GENDERS))}."})
+            # Validate age_group metadata
+            age_group = item.get("age_group")
+            if not isinstance(age_group, str) or age_group.upper() not in VALID_AGE_GROUPS:
+                findings.append({"code": "invalid_age_group" if age_group else "missing_age_group",
+                                 "entry_number": i,
+                                 "value": age_group,
+                                 "source_line": source_line,
+                                 "expected": "One of: CHILD, TEEN, YOUNG_ADULT, ADULT, MIDDLE_AGED, ELDERLY, AGELESS, UNSPECIFIED",
+                                 "message": f"Spoken entry must have a valid age_group: {', '.join(sorted(VALID_AGE_GROUPS))}."})
         else:  # NARRATOR (or any non-SPOKEN)
             if speaker.upper() != "NARRATOR":
                 findings.append({"code": "narrator_renamed", "entry_number": i,

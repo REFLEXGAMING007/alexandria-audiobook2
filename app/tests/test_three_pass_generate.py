@@ -483,15 +483,17 @@ class Pass2Tests(unittest.TestCase):
         frozen = [{"type": "NARRATOR", "text": "The room was cold."},
                   {"type": "SPOKEN", "text": "Tell me."}]
         good = [{"n": 0, "head": "The room was", "speaker": "NARRATOR"},
-                {"n": 1, "head": "Tell me.", "speaker": "ELENA"}]
+                {"n": 1, "head": "Tell me.", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         client = _client_returning([good])
         out = tp.attribute_batch(client, "m", frozen, self._params(), roster=[])
         self.assertEqual(["NARRATOR", "ELENA"], [e["speaker"] for e in out])
         self.assertEqual("Tell me.", out[1]["text"])
+        self.assertEqual("FEMALE", out[1]["gender"])
+        self.assertEqual("ADULT", out[1]["age_group"])
 
     def test_attribute_prompt_includes_read_only_neighbor_context(self):
         seen = {}
-        good = [{"n": 0, "head": "Yes", "speaker": "ELENA"}]
+        good = [{"n": 0, "head": "Yes", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         def create(**kwargs):
             seen["prompt"] = kwargs["messages"][-1]["content"]
             return SimpleNamespace(choices=[SimpleNamespace(
@@ -508,7 +510,7 @@ class Pass2Tests(unittest.TestCase):
 
     def test_pass2_fail_mode_raises_when_exhausted(self):
         frozen = [{"type": "SPOKEN", "text": "Tell me."}]
-        bad = [{"n": 0, "head": "Tell me.", "speaker": "NARRATOR"}]
+        bad = [{"n": 0, "head": "Tell me.", "speaker": "NARRATOR", "gender": "FEMALE", "age_group": "ADULT"}]
         client = _client_returning([bad, bad, bad, bad])
         with self.assertRaises(tp.PassExhausted):
             tp.attribute_batch(client, "m", frozen, self._params(), roster=[],
@@ -589,10 +591,10 @@ class EndToEndTests(unittest.TestCase):
         source = "One line. Two line."
         seg = [{"type": "SPOKEN", "text": "One line."},
                {"type": "SPOKEN", "text": "Two line."}]
-        bad_pair = [{"n": 0, "speaker": "NARRATOR"},
-                    {"n": 1, "speaker": "NARRATOR"}]
-        first = [{"n": 0, "speaker": "ALICE"}]
-        second = [{"n": 0, "speaker": "BOB"}]
+        bad_pair = [{"n": 0, "speaker": "NARRATOR", "gender": "FEMALE", "age_group": "ADULT"},
+                    {"n": 1, "speaker": "NARRATOR", "gender": "FEMALE", "age_group": "ADULT"}]
+        first = [{"n": 0, "speaker": "ALICE", "gender": "FEMALE", "age_group": "ADULT"}]
+        second = [{"n": 0, "speaker": "BOB", "gender": "MALE", "age_group": "ADULT"}]
         instructed = [{"n": 0, "instruct": "Quiet."},
                       {"n": 1, "instruct": "Firm."}]
         client = _client_returning([seg] + [bad_pair] * 4 +
@@ -601,6 +603,10 @@ class EndToEndTests(unittest.TestCase):
                                     LLMGenParams(max_tokens=500, temperature=0.1),
                                     chunk_size=6000)
         self.assertEqual(["ALICE", "BOB"], [e["speaker"] for e in entries])
+        self.assertEqual("FEMALE", entries[0]["gender"])
+        self.assertEqual("ADULT", entries[0]["age_group"])
+        self.assertEqual("MALE", entries[1]["gender"])
+        self.assertEqual("ADULT", entries[1]["age_group"])
 
     def test_every_model_call_is_announced_and_every_unit_finished(self):
         """The Script tab and core._compute_eta read these lines; without
@@ -610,7 +616,7 @@ class EndToEndTests(unittest.TestCase):
         seg = [{"type": "NARRATOR", "text": "The room was cold."},
                {"type": "SPOKEN", "text": "Tell me the truth."}]
         named = [{"n": 0, "head": "The room was", "speaker": "NARRATOR"},
-                 {"n": 1, "head": "Tell me the", "speaker": "ELENA"}]
+                 {"n": 1, "head": "Tell me the", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         instructed = [{"n": 0, "head": "The room was", "instruct": "Cold, still narration."},
                       {"n": 1, "head": "Tell me the", "instruct": "Firm, quiet demand."}]
         import io, contextlib
@@ -644,7 +650,7 @@ class EndToEndTests(unittest.TestCase):
         seg = [{"type": "NARRATOR", "text": "The room was cold."},
                {"type": "SPOKEN", "text": "Tell me the truth."}]
         named = [{"n": 0, "head": "The room was", "speaker": "NARRATOR"},
-                 {"n": 1, "head": "Tell me the", "speaker": "ELENA"}]
+                 {"n": 1, "head": "Tell me the", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         instructed = [{"n": 0, "head": "The room was", "instruct": "Cold, still narration."},
                       {"n": 1, "head": "Tell me the", "instruct": "Firm, quiet demand."}]
         import io, contextlib, re
@@ -693,7 +699,7 @@ class EndToEndTests(unittest.TestCase):
         # answers for both entries; its answer for the narration line is
         # discarded in favour of the deterministic NARRATOR.
         named = [{"n": 0, "head": "The room was", "speaker": "NARRATOR"},
-                 {"n": 1, "head": "Tell me the", "speaker": "ELENA"}]
+                 {"n": 1, "head": "Tell me the", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         instructed = [{"n": 0, "head": "The room was", "instruct": "Cold, still narration."},
                       {"n": 1, "head": "Tell me the", "instruct": "Firm, quiet demand."}]
         client = _client_returning([seg, named, instructed])
@@ -701,7 +707,10 @@ class EndToEndTests(unittest.TestCase):
         entries = tp.run_three_pass(client, "m", source, params, chunk_size=6000)
         self.assertEqual(2, len(entries))
         self.assertEqual({"speaker", "text", "instruct"}, set(entries[0].keys()))
+        self.assertEqual({"speaker", "text", "instruct", "gender", "age_group"}, set(entries[1].keys()))
         self.assertEqual("ELENA", entries[1]["speaker"])
+        self.assertEqual("FEMALE", entries[1]["gender"])
+        self.assertEqual("ADULT", entries[1]["age_group"])
         self.assertEqual("Firm, quiet demand.", entries[1]["instruct"])
 
     def test_first_person_narrator_is_seeded_into_attribution_roster(self):
@@ -882,7 +891,7 @@ class CheckpointTests(unittest.TestCase):
         # answers for both entries; its answer for the narration line is
         # discarded in favour of the deterministic NARRATOR.
         named = [{"n": 0, "head": "The room was", "speaker": "NARRATOR"},
-                 {"n": 1, "head": "Tell me the", "speaker": "ELENA"}]
+                 {"n": 1, "head": "Tell me the", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         instructed = [{"n": 0, "head": "The room was", "instruct": "Cold."},
                       {"n": 1, "head": "Tell me the", "instruct": "Firm."}]
         return seg, named, instructed
@@ -930,7 +939,7 @@ class CheckpointTests(unittest.TestCase):
         seg, _, _ = self._payloads()
         params = LLMGenParams(max_tokens=500, temperature=0.1)
         bad = [{"n": 0, "head": "The room was", "speaker": "NARRATOR"},
-               {"n": 1, "head": "Tell me the", "speaker": "NARRATOR"}]
+               {"n": 1, "head": "Tell me the", "speaker": "NARRATOR", "gender": "FEMALE", "age_group": "ADULT"}]
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "book.json")
             fingerprint = tp.three_pass_fingerprint(source, "m", 6000, params)
@@ -956,7 +965,7 @@ class FreezeEnforcementTests(unittest.TestCase):
         # the output text is always the frozen text verbatim, and nothing the
         # model does to a body can corrupt it.
         frozen = [{"type": "SPOKEN", "text": "Tell me the truth."}]
-        resp = [{"n": 0, "head": "Tell me the", "speaker": "ELENA"}]
+        resp = [{"n": 0, "head": "Tell me the", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         p = LLMGenParams(system_prompt="s", user_prompt_template="{roster}{batch}",
                          max_tokens=500, temperature=0.1)
         out = tp.attribute_batch(_client_returning([resp]), "m", frozen, p, roster=[])
@@ -973,7 +982,7 @@ class FreezeEnforcementTests(unittest.TestCase):
                            "even Beatrice knew what she was trying to do."},
                   {"type": "SPOKEN", "text": "Thank you―― Goodbye, Betty."}]
         resp = [{"n": 0, "head": "The strength in those", "speaker": "NARRATOR"},
-                {"n": 1, "head": "Thank you―― Goodbye,", "speaker": "RYUZU"}]
+                {"n": 1, "head": "Thank you―― Goodbye,", "speaker": "RYUZU", "gender": "FEMALE", "age_group": "ADULT"}]
         p = LLMGenParams(system_prompt="s", user_prompt_template="{roster}{batch}",
                          max_tokens=800, temperature=0.1)
         out = tp.attribute_batch(_client_returning([resp]), "m", frozen, p, roster=[])
@@ -992,7 +1001,7 @@ class FreezeEnforcementTests(unittest.TestCase):
 
     def test_attribute_fallback_preserves_pause_after(self):
         frozen = [{"type": "SPOKEN", "text": "Tell me.", "pause_after": 500}]
-        bad = [{"n": 0, "head": "Tell me.", "speaker": "NARRATOR"}]  # never names the spoken line
+        bad = [{"n": 0, "head": "Tell me.", "speaker": "NARRATOR", "gender": "FEMALE", "age_group": "ADULT"}]  # never names the spoken line
         p = LLMGenParams(system_prompt="s", user_prompt_template="{roster}{batch}",
                          max_tokens=500, temperature=0.1)
         out = tp.attribute_batch(_client_returning([bad]), "m", frozen, p, roster=[],
@@ -1181,7 +1190,7 @@ class ManifestTests(unittest.TestCase):
         # answers for both entries; its answer for the narration line is
         # discarded in favour of the deterministic NARRATOR.
         named = [{"n": 0, "head": "The room was", "speaker": "NARRATOR"},
-                 {"n": 1, "head": "Tell me the", "speaker": "ELENA"}]
+                 {"n": 1, "head": "Tell me the", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         instructed = [{"n": 0, "head": "The room was", "instruct": "Cold."},
                       {"n": 1, "head": "Tell me the", "instruct": "Firm."}]
         client = _client_returning([seg, named, instructed])
@@ -1484,8 +1493,8 @@ class AttributionContextKnobTests(unittest.TestCase):
                 body = messages[-1]["content"].split("PASSAGE:", 1)[1].split("AFTER THE PASSAGE")[0]
                 spoken = {int(m.group(1)) for m in re.finditer(r'\|(\d+)\|"', body)}
                 narr = {int(m.group(1)) for m in re.finditer(r'(?m)^\[(\d+)\] ', body)}
-                content = json.dumps([{"n": i, "speaker": "ELENA" if i in spoken else "NARRATOR"}
-                                      for i in sorted(spoken | narr)])
+                content = json.dumps([{"n": i, "speaker": "ELENA" if i in spoken else "NARRATOR", "gender": "FEMALE", "age_group": "ADULT"} if i in spoken else {"n": i, "speaker": "NARRATOR"}
+                                       for i in sorted(spoken | narr)])
             else:
                 body = messages[-1]["content"]
                 content = json.dumps([{"n": int(m.group(1)), "head": " ".join(m.group(2).split()[:3]),
@@ -1519,8 +1528,8 @@ class AttributionContextKnobTests(unittest.TestCase):
             if len(seen) == 1:
                 content = json.dumps(seg)
             elif "MY RULE" in messages[0]["content"]:
-                content = json.dumps([{"n": 0, "speaker": "NARRATOR"}, {"n": 1, "speaker": "ELENA"},
-                                      {"n": 2, "speaker": "NARRATOR"}])
+                content = json.dumps([{"n": 0, "speaker": "NARRATOR"}, {"n": 1, "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"},
+                                       {"n": 2, "speaker": "NARRATOR"}])
             else:
                 body = messages[-1]["content"]
                 content = json.dumps([{"n": int(m.group(1)), "head": " ".join(m.group(2).split()[:3]),

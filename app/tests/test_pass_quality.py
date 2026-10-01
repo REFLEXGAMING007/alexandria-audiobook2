@@ -213,7 +213,7 @@ class AttributionTests(unittest.TestCase):
         frozen = [{"type": "NARRATOR", "text": "The room was cold."},
                   {"type": "SPOKEN", "text": "Tell me."}]
         resp = [{"n": 0, "head": "The room was", "speaker": "NARRATOR"},
-                {"n": 1, "head": "Tell me.", "speaker": "ELENA"}]
+                {"n": 1, "head": "Tell me.", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         report = validate_attribution(frozen, resp)
         self.assertTrue(report["passed"], report["findings"])
 
@@ -221,14 +221,14 @@ class AttributionTests(unittest.TestCase):
         # Binding is by index, so a reordered response still validates + binds.
         frozen = [{"type": "NARRATOR", "text": "The room was cold."},
                   {"type": "SPOKEN", "text": "Tell me."}]
-        resp = [{"n": 1, "head": "Tell me.", "speaker": "ELENA"},
+        resp = [{"n": 1, "head": "Tell me.", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"},
                 {"n": 0, "head": "The room was", "speaker": "NARRATOR"}]
         report = validate_attribution(frozen, resp)
         self.assertTrue(report["passed"], report["findings"])
 
     def test_attribution_fails_when_spoken_left_as_narrator(self):
         frozen = [{"type": "SPOKEN", "text": "Tell me."}]
-        resp = [{"n": 0, "head": "Tell me.", "speaker": "NARRATOR"}]
+        resp = [{"n": 0, "head": "Tell me.", "speaker": "NARRATOR", "gender": "FEMALE", "age_group": "ADULT"}]
         report = validate_attribution(frozen, resp)
         codes = {f["code"] for f in report["findings"]}
         self.assertIn("spoken_not_named", codes)
@@ -236,7 +236,7 @@ class AttributionTests(unittest.TestCase):
     def test_attribution_finding_carries_source_and_expected_context(self):
         frozen = [{"type": "SPOKEN", "text": "Tell me exactly."}]
         report = validate_attribution(
-            frozen, [{"n": 0, "head": "Tell me exactly.", "speaker": "NARRATOR"}])
+            frozen, [{"n": 0, "head": "Tell me exactly.", "speaker": "NARRATOR", "gender": "FEMALE", "age_group": "ADULT"}])
         finding = report["findings"][0]
         self.assertEqual("Tell me exactly.", finding["source_line"])
         self.assertEqual("a character name, not NARRATOR or an empty value",
@@ -248,21 +248,21 @@ class AttributionTests(unittest.TestCase):
 
         renamed = validate_attribution(
             [{"type": "NARRATOR", "text": "The door opened."}],
-            [{"n": 0, "head": "The door opened.", "speaker": "ERIS"}])
+            [{"n": 0, "head": "The door opened.", "speaker": "ERIS", "gender": "FEMALE", "age_group": "ADULT"}])
         self.assertIn('rejected="ERIS"',
                       format_validation_findings(renamed["findings"]))
 
     def test_attribution_ignores_legacy_head_when_index_is_valid(self):
         frozen = [{"type": "SPOKEN", "text": "Tell me."}]
-        resp = [{"n": 0, "head": "Something else entirely", "speaker": "ELENA"}]
+        resp = [{"n": 0, "head": "Something else entirely", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]
         report = validate_attribution(frozen, resp)
         self.assertTrue(report["passed"])
 
     def test_attribution_fails_on_duplicate_or_missing_index(self):
         frozen = [{"type": "SPOKEN", "text": "Tell me."},
                   {"type": "SPOKEN", "text": "Now go."}]
-        resp = [{"n": 0, "head": "Tell me.", "speaker": "ELENA"},
-                {"n": 0, "head": "Tell me.", "speaker": "ELENA"}]  # dup 0, index 1 missing
+        resp = [{"n": 0, "head": "Tell me.", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"},
+                {"n": 0, "head": "Tell me.", "speaker": "ELENA", "gender": "FEMALE", "age_group": "ADULT"}]  # dup 0, index 1 missing
         report = validate_attribution(frozen, resp)
         codes = {f["code"] for f in report["findings"]}
         self.assertIn("alignment_violated", codes)
@@ -312,7 +312,7 @@ class IndexHeadCheckTests(unittest.TestCase):
     def test_non_string_model_fields_fail_validation_without_crashing(self):
         frozen = [{"type": "SPOKEN", "text": "Tell me now."}]
         attribution = validate_attribution(
-            frozen, [{"n": 0, "head": "Tell me now", "speaker": {"name": "ELENA"}}])
+            frozen, [{"n": 0, "head": "Tell me now", "speaker": {"name": "ELENA"}, "gender": "FEMALE", "age_group": "ADULT"}])
         instruct = validate_instruct(
             [{"speaker": "ELENA", "text": "Tell me now."}],
             [{"n": 0, "head": "Tell me now", "instruct": ["firm"]}])
@@ -369,7 +369,7 @@ class AttributionRejectsTypeAsSpeakerTest(unittest.TestCase):
     def test_literal_type_name_is_rejected(self):
         frozen = [{"type": "SPOKEN", "text": "Oh-ho."}]
         report = validate_attribution(frozen, [{"n": 0, "head": "Oh-ho.",
-                                                "speaker": "SPOKEN"}])
+                                                "speaker": "SPOKEN", "gender": "FEMALE", "age_group": "ADULT"}])
         self.assertFalse(report["passed"])
         self.assertTrue(any("type" in f.get("code", "")
                             or "type" in f.get("message", "").lower()
@@ -378,13 +378,13 @@ class AttributionRejectsTypeAsSpeakerTest(unittest.TestCase):
     def test_rejection_is_case_insensitive(self):
         frozen = [{"type": "SPOKEN", "text": "Oh-ho."}]
         report = validate_attribution(frozen, [{"n": 0, "head": "Oh-ho.",
-                                                "speaker": "spoken"}])
+                                                "speaker": "spoken", "gender": "FEMALE", "age_group": "ADULT"}])
         self.assertFalse(report["passed"])
 
     def test_a_real_name_still_passes(self):
         frozen = [{"type": "SPOKEN", "text": "Oh-ho."}]
         report = validate_attribution(frozen, [{"n": 0, "head": "Oh-ho.",
-                                                "speaker": "SHIRON"}])
+                                                "speaker": "SHIRON", "gender": "FEMALE", "age_group": "ADULT"}])
         self.assertTrue(report["passed"], report["findings"])
 
     def test_unknown_placeholder_is_still_allowed(self):
@@ -392,7 +392,7 @@ class AttributionRejectsTypeAsSpeakerTest(unittest.TestCase):
         # assigns; it must not be swept up with the type-name rejection.
         frozen = [{"type": "SPOKEN", "text": "Oh-ho."}]
         report = validate_attribution(frozen, [{"n": 0, "head": "Oh-ho.",
-                                                "speaker": "UNKNOWN"}])
+                                                "speaker": "UNKNOWN", "gender": "FEMALE", "age_group": "ADULT"}])
         self.assertTrue(report["passed"], report["findings"])
 
 

@@ -1080,12 +1080,35 @@ def apply_manual_recovery(entries, resolution):
         failed = checkpoint["failed"]
         if failed.get("pass") == "attribute":
             frozen = failed.get("entries") or []
-            report = validate_attribution(frozen, entries, None)
+            # Pre-process manual entries to add default gender/age_group for SPOKEN
+            # since the user provides speakers but not metadata
+            entries_for_validation = []
+            for i, e in enumerate(entries):
+                entry_copy = dict(e)
+                if i < len(frozen) and frozen[i].get("type") == "SPOKEN":
+                    if "gender" not in entry_copy:
+                        entry_copy["gender"] = "UNSPECIFIED"
+                    if "age_group" not in entry_copy:
+                        entry_copy["age_group"] = "UNSPECIFIED"
+                entries_for_validation.append(entry_copy)
+            report = validate_attribution(frozen, entries_for_validation, None)
             if not report.get("passed"):
                 return {"accepted": False, "report": report}
             by_n = {int(e["n"]): e for e in entries}
-            bound = [{k: v for k, v in f.items() if k != "type"} | {"speaker": by_n[i]["speaker"]}
-                     for i, f in enumerate(frozen)]
+            bound = []
+            for i, f in enumerate(frozen):
+                manual = by_n.get(i, {})
+                speaker = manual.get("speaker")
+                if f.get("type") == "SPOKEN":
+                    base = {**{k: v for k, v in f.items() if k != "type"}, "speaker": speaker}
+                    # Preserve manually provided gender/age_group, or default to UNSPECIFIED
+                    gender = manual.get("gender", "UNSPECIFIED")
+                    age_group = manual.get("age_group", "UNSPECIFIED")
+                    base["gender"] = gender
+                    base["age_group"] = age_group
+                    bound.append(base)
+                else:
+                    bound.append({**{k: v for k, v in f.items() if k != "type"}, "speaker": speaker})
             bound = stabilize_speaker_identities(bound, established_speakers=failed.get("roster") or [])["entries"]
             named = list(checkpoint.get("named") or [])
             for index, entry in zip(failed.get("indices") or [], bound):

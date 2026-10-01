@@ -395,7 +395,12 @@ ATTRIBUTION_RESPONSE_SCHEMA = {
         "type": "array",
         "items": {
             "type": "object",
-            "properties": {"n": {"type": "integer"}, "speaker": {"type": "string"}},
+            "properties": {
+                "n": {"type": "integer"},
+                "speaker": {"type": "string"},
+                "gender": {"type": "string", "enum": ["MALE", "FEMALE", "UNSPECIFIED"]},
+                "age_group": {"type": "string", "enum": ["CHILD", "TEEN", "YOUNG_ADULT", "ADULT", "MIDDLE_AGED", "ELDERLY", "AGELESS", "UNSPECIFIED"]}
+            },
             "required": ["n", "speaker"],
             "additionalProperties": False,
         },
@@ -429,14 +434,24 @@ def keep_exhausted_answer(frozen_batch, last_entries, last_report, roster):
     if len(frozen_batch) == 1 and ok and set(codes) <= KEEPABLE_ATTRIBUTION_FAILURES:
         speaker = strip_roster_alias_echo(ordered[0].get("speaker"))
         speaker = speaker.strip() if isinstance(speaker, str) and speaker.strip() else "UNKNOWN"
+        gender = ordered[0].get("gender")
+        age_group = ordered[0].get("age_group")
         print(f"  Attribution exhausted; kept the model's last answer {speaker!r} "
               f"unchecked ({', '.join(codes)})")
-        return [{**{k: v for k, v in frozen_batch[0].items() if k != "type"},
-                 "speaker": speaker, "attribution_unchecked": codes}]
+        frozen = frozen_batch[0]
+        result = {**{k: v for k, v in frozen.items() if k != "type"}, "speaker": speaker, "attribution_unchecked": codes}
+        # Preserve metadata for SPOKEN entries
+        if frozen.get("type") == "SPOKEN":
+            if gender is not None:
+                result["gender"] = gender
+            if age_group is not None:
+                result["age_group"] = age_group
+        return [result]
     print(f"  Attribution exhausted; labelled {len(frozen_batch)} entr"
           f"{'y' if len(frozen_batch) == 1 else 'ies'} with the fallback ({', '.join(codes)})")
     seeded = [{**{k: v for k, v in e.items() if k != "type"},
-               "speaker": "NARRATOR" if e["type"] == "NARRATOR" else "UNKNOWN"}
+               "speaker": "NARRATOR" if e["type"] == "NARRATOR" else "UNKNOWN",
+               **({"gender": "UNSPECIFIED", "age_group": "UNSPECIFIED"} if e["type"] == "SPOKEN" else {})}
               for e in frozen_batch]
     return [{**entry, "attribution_unchecked": codes} for entry in
             stabilize_speaker_identities(seeded, established_speakers=roster)["entries"]]
@@ -511,7 +526,16 @@ def attribute_batch(client, model_name, frozen_batch, params, roster,
             if isinstance(speaker, str):
                 # one voice per character: a cast alias ("GRIFFIN") becomes its name
                 speaker = alias_to_name.get(speaker.strip().upper(), speaker)
-            out.append({**{k: v for k, v in f.items() if k != "type"}, "speaker": speaker})
+            base = {**{k: v for k, v in f.items() if k != "type"}, "speaker": speaker}
+            # Preserve Pass 2 metadata for SPOKEN entries
+            if f.get("type") == "SPOKEN":
+                gender = item.get("gender")
+                age_group = item.get("age_group")
+                if gender is not None:
+                    base["gender"] = gender
+                if age_group is not None:
+                    base["age_group"] = age_group
+            out.append(base)
         return out
     if exhaustion_sink is not None:
         exhaustion_sink.append(True)
@@ -522,7 +546,8 @@ def attribute_batch(client, model_name, frozen_batch, params, roster,
         raise PassExhausted(f"attribution failed for a {len(frozen_batch)}-entry batch",
                             last_entries=validated.get("last"))
     seeded = [{**{k: v for k, v in e.items() if k != "type"},
-               "speaker": "NARRATOR" if e["type"] == "NARRATOR" else "UNKNOWN"}
+               "speaker": "NARRATOR" if e["type"] == "NARRATOR" else "UNKNOWN",
+               **({"gender": "UNSPECIFIED", "age_group": "UNSPECIFIED"} if e["type"] == "SPOKEN" else {})}
               for e in frozen_batch]
     return stabilize_speaker_identities(seeded, established_speakers=roster)["entries"]
 
@@ -1429,7 +1454,7 @@ def three_pass_fingerprint(source_text, model_name, chunk_size, params=None,
         "context_windows": context_windows,
         "context_rescue_retries": context_rescue_retries,
         "collect_all_failures": collect_all_failures,
-        "pipeline_version": 8,
+        "pipeline_version": 9,
         # Only present when moved off the default, so every checkpoint written
         # before these knobs existed keeps its identity and resumes.
         **({"attribute_batch_size": attribute_batch_size}
@@ -1758,10 +1783,14 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
         # `if named[index] is not None: continue` would skip them - leaving
         # `deterministic` empty on resume, so the narration silently stopped
         # being sent as context for exactly the runs that were restarted.
+        #
+        # Source-label entries (explicit speaker in the text) are NOT pre-resolved
+        # here; they must still pass through Pass 2 so the LLM supplies
+        # gender/age_group metadata while respecting the known speaker.
         if resolved is not None and resolved.get("speaker") == "NARRATOR":
             deterministic[index] = resolved
-        if named[index] is None:
-            named[index] = resolved
+            if named[index] is None:
+                named[index] = resolved
 
     def get_attribution_roster():
         current = build_roster(
@@ -2111,11 +2140,26 @@ def attribute_batch_voted(client, model_name, frozen_batch, params, roster,
 
     entries, confidences = [], []
     for position in range(len(ballots[0])):
-        speakers = [ballot[position].get("speaker") for ballot in ballots]
-        winner, confidence = majority_vote(speakers)
-        entry = dict(ballots[0][position])
-        entry["speaker"] = winner
-        entries.append(entry)
+        # Vote on the complete speaker-state tuple for consistency
+        speaker_tuples = []
+        for ballot in ballots:
+            entry = ballot[position]
+            speaker = entry.get("speaker")
+            gender = entry.get("gender")
+            age_group = entry.get("age_group")
+            speaker_tuples.append((speaker, gender, age_group))
+        winner, confidence = majority_vote(speaker_tuples)
+        # Find the ballot that matches the winning tuple and use its full entry
+        for ballot in ballots:
+            entry = ballot[position]
+            if (entry.get("speaker"), entry.get("gender"), entry.get("age_group")) == winner:
+                entries.append(dict(entry))
+                break
+        else:
+            # Fallback: construct from winner tuple + first ballot's other fields
+            base = dict(ballots[0][position])
+            base["speaker"], base["gender"], base["age_group"] = winner
+            entries.append(base)
         confidences.append(confidence)
     return entries, confidences
 
