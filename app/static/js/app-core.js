@@ -2558,15 +2558,30 @@
 
         function createVoiceCard(voice, index) {
             const config = voice.config || {};
-            const voiceType = config.type || 'custom';
+            const charType = voice.character_type || (voice.name === 'NARRATOR' ? 'NARRATOR' : 'BACKGROUND');
+            const displayName = voice.display_name || voice.name;
+            // Narrator voice is driven by narrator_strategy, never by character states.
+            const selectedState = charType === 'NARRATOR' ? null : getSelectedState(voice);
+            const stateKey = selectedState ? characterStateKey(selectedState) : '';
+            // voiceCfg = the voice the editor below edits. It is the selected state's
+            // config when a state is active, otherwise the character's own config.
+            // Character-level fields (persona, candidates, versions, timeline...) stay
+            // on `config` so they keep working exactly as before.
+            const voiceCfg = stateVoiceConfig(voice, selectedState);
+            const voiceType = voiceCfg.type || 'custom';
+            const stateSelector = (charType === 'NARRATOR' || voice.assignable === false)
+                ? '' : renderStateSelector(voice);
+            const typeBadge = charType === 'NARRATOR' ? ''
+                : `<span class="badge bg-${charType === 'NAMED' ? 'primary' : charType === 'UNKNOWN' ? 'warning' : charType === 'GROUP' ? 'info' : 'secondary'} me-1">${escapeHtml(charType)}</span>`;
 
             const ready = !!config.ready;
             return `
-                <div class="card voice-card mb-3${ready ? ' border-success' : ''}" data-voice="${escapeHtml(voice.name)}" data-ready="${ready ? '1' : '0'}">
+                <div class="card voice-card mb-3${ready ? ' border-success' : ''}" data-voice="${escapeHtml(voice.name)}" data-ready="${ready ? '1' : '0'}" data-voice-index="${index}" data-state-key="${escapeHtml(stateKey)}">
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-3">
-                                <h5 class="card-title">${escapeHtml(voice.name)} ${config.alias_of ? `<span class="badge bg-info ms-2" title="Alias of ${escapeHtml(config.alias_of)}">${escapeHtml(config.alias_of)}</span>` : ''}${(window._lineCounts && window._lineCounts[voice.name] != null) ? `<span class="badge bg-secondary ms-2" title="${window._lineCounts[voice.name]} lines in this book">${window._lineCounts[voice.name]} lines</span>` : ''}</h5>
+                                <h5 class="card-title">${typeBadge}${escapeHtml(displayName)}${voice.name !== displayName ? ` <small class="text-muted">(${escapeHtml(voice.name)})</small>` : ''} ${config.alias_of ? `<span class="badge bg-info ms-2" title="Alias of ${escapeHtml(config.alias_of)}">${escapeHtml(config.alias_of)}</span>` : ''}${(window._lineCounts && window._lineCounts[voice.name] != null) ? `<span class="badge bg-secondary ms-2" title="${window._lineCounts[voice.name]} lines in this book">${window._lineCounts[voice.name]} lines</span>` : ''}</h5>
+                                ${stateSelector}
                                 <button class="btn btn-sm btn-outline-primary mt-1" type="button" onclick="regeneratePersona(this)"><i class="fas fa-rotate me-1"></i>Regenerate persona</button>
                                 <button class="btn btn-sm btn-outline-primary mt-1" type="button" onclick="generateAgeVersion(this)"><i class="fas fa-person-circle-plus me-1"></i>Generate age version</button>
                                 <div class="small text-muted">Persona: ${escapeHtml(config.persona_status || 'unreviewed')} · Voice: ${escapeHtml(config.voice_status || 'unassigned')}</div>
@@ -2634,11 +2649,11 @@
                                     <div class="row g-2">
                                         <div class="col-md-6">
                                             <select class="form-select voice-select">
-                                                ${AVAILABLE_VOICES.map(v => `<option value="${v}" ${config.voice === v ? 'selected' : ''}>${v}</option>`).join('')}
+                                                ${AVAILABLE_VOICES.map(v => `<option value="${v}" ${voiceCfg.voice === v ? 'selected' : ''}>${v}</option>`).join('')}
                                             </select>
                                         </div>
                                         <div class="col-md-6">
-                                            <input type="text" class="form-control character-style" placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)" value="${escapeHtml(config.character_style || config.default_style || '')}">
+                                            <input type="text" class="form-control character-style" placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)" value="${escapeHtml(voiceCfg.character_style || voiceCfg.default_style || '')}">
                                             ${renderStyleTimeline(voice.name, config)}
                                         </div>
                                     </div>
@@ -2657,12 +2672,12 @@
                                                     let html = '';
                                                     if (males.length) {
                                                         html += '<optgroup label="Male">';
-                                                        html += males.map(m => `<option value="${escapeHtml(m.id)}" ${config.adapter_id === m.id ? 'selected' : ''} ${m.downloaded === false ? 'disabled' : ''}>${m.favorite ? '★ ' : ''}${escapeHtml(m.name)}${m.downloaded === false ? ' (not downloaded)' : ''} — ${escapeHtml(m.description || '')}</option>`).join('');
+                                                        html += males.map(m => `<option value="${escapeHtml(m.id)}" ${voiceCfg.adapter_id === m.id ? 'selected' : ''} ${m.downloaded === false ? 'disabled' : ''}>${m.favorite ? '★ ' : ''}${escapeHtml(m.name)}${m.downloaded === false ? ' (not downloaded)' : ''} — ${escapeHtml(m.description || '')}</option>`).join('');
                                                         html += '</optgroup>';
                                                     }
                                                     if (females.length) {
                                                         html += '<optgroup label="Female">';
-                                                        html += females.map(m => `<option value="${escapeHtml(m.id)}" ${config.adapter_id === m.id ? 'selected' : ''} ${m.downloaded === false ? 'disabled' : ''}>${m.favorite ? '★ ' : ''}${escapeHtml(m.name)}${m.downloaded === false ? ' (not downloaded)' : ''} — ${escapeHtml(m.description || '')}</option>`).join('');
+                                                        html += females.map(m => `<option value="${escapeHtml(m.id)}" ${voiceCfg.adapter_id === m.id ? 'selected' : ''} ${m.downloaded === false ? 'disabled' : ''}>${m.favorite ? '★ ' : ''}${escapeHtml(m.name)}${m.downloaded === false ? ' (not downloaded)' : ''} — ${escapeHtml(m.description || '')}</option>`).join('');
                                                         html += '</optgroup>';
                                                     }
                                                     return html;
@@ -2670,7 +2685,7 @@
                                             </select>
                                         </div>
                                         <div class="col-md-6">
-                                            <input type="text" class="form-control builtin-lora-style" placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)" value="${escapeHtml(voiceType === 'builtin_lora' ? (config.character_style || '') : '')}">
+                                            <input type="text" class="form-control builtin-lora-style" placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)" value="${escapeHtml(voiceType === 'builtin_lora' ? (voiceCfg.character_style || '') : '')}">
                                         </div>
                                     </div>
                                     <small class="text-muted mt-1 d-block">Grayed-out voices need to be downloaded first. Go to the <strong>Training</strong> tab to download them.</small>
@@ -2683,12 +2698,12 @@
                                             <select class="form-select designed-voice-select" onchange="onDesignedVoiceSelect(this)">
                                                 <option value="">-- Select voice or enter path manually --</option>
                                                 ${(window._cloneVoicesCache || []).length ? `<optgroup label="Uploaded Voices">
-                                                    ${(window._cloneVoicesCache || []).map(v => `<option value="clone:${escapeHtml(v.id)}" ${config.ref_audio && config.ref_audio.includes(v.filename) ? 'selected' : ''}>${escapeHtml(v.name)}</option>`).join('')}
+                                                    ${(window._cloneVoicesCache || []).map(v => `<option value="clone:${escapeHtml(v.id)}" ${voiceCfg.ref_audio && voiceCfg.ref_audio.includes(v.filename) ? 'selected' : ''}>${escapeHtml(v.name)}</option>`).join('')}
                                                 </optgroup>` : ''}
                                                 ${(window._designedVoicesCache || []).length ? `<optgroup label="Designed Voices">
-                                                    ${(window._designedVoicesCache || []).map(v => `<option value="design:${escapeHtml(v.id)}" ${config.ref_audio && config.ref_audio.includes(v.filename) ? 'selected' : ''}>${escapeHtml(v.name)}</option>`).join('')}
+                                                    ${(window._designedVoicesCache || []).map(v => `<option value="design:${escapeHtml(v.id)}" ${voiceCfg.ref_audio && voiceCfg.ref_audio.includes(v.filename) ? 'selected' : ''}>${escapeHtml(v.name)}</option>`).join('')}
                                                 </optgroup>` : ''}
-                                                <option value="__manual__" ${config.ref_audio && !(window._cloneVoicesCache || []).some(v => config.ref_audio.includes(v.filename)) && !(window._designedVoicesCache || []).some(v => config.ref_audio.includes(v.filename)) && config.ref_audio ? 'selected' : ''}>Custom path...</option>
+                                                <option value="__manual__" ${voiceCfg.ref_audio && !(window._cloneVoicesCache || []).some(v => voiceCfg.ref_audio.includes(v.filename)) && !(window._designedVoicesCache || []).some(v => voiceCfg.ref_audio.includes(v.filename)) && voiceCfg.ref_audio ? 'selected' : ''}>Custom path...</option>
                                             </select>
                                         </div>
                                         <div class="col-auto">
@@ -2696,11 +2711,11 @@
                                             <input type="file" class="clone-voice-file-input" accept=".wav,.mp3,.flac,.ogg" style="display:none" onchange="handleCloneVoiceUpload(this)">
                                         </div>
                                     </div>
-                                    <input type="text" class="form-control ref-text mb-2" placeholder="Reference Text" value="${escapeHtml(config.ref_text || '')}">
+                                    <input type="text" class="form-control ref-text mb-2" placeholder="Reference Text" value="${escapeHtml(voiceCfg.ref_text || '')}">
                                     <div class="input-group">
-                                        <input type="text" class="form-control ref-audio" placeholder="Path to audio file" value="${escapeHtml(config.ref_audio || '')}" ${config.ref_audio && ((window._cloneVoicesCache || []).some(v => config.ref_audio.includes(v.filename)) || (window._designedVoicesCache || []).some(v => config.ref_audio.includes(v.filename))) ? 'readonly' : ''}>
-                                        <button class="btn btn-sm btn-outline-secondary clone-play-btn" onclick="playCloneVoice(this)" title="Play reference audio" style="display:${config.ref_audio ? 'inline-block' : 'none'}"><i class="fas fa-play"></i></button>
-                                        <button class="btn btn-sm btn-outline-danger clone-delete-btn" onclick="deleteCloneVoice(this)" title="Delete uploaded voice" style="display:${config.ref_audio && (window._cloneVoicesCache || []).some(v => config.ref_audio.includes(v.filename)) ? 'inline-block' : 'none'}"><i class="fas fa-trash"></i></button>
+                                        <input type="text" class="form-control ref-audio" placeholder="Path to audio file" value="${escapeHtml(voiceCfg.ref_audio || '')}" ${voiceCfg.ref_audio && ((window._cloneVoicesCache || []).some(v => voiceCfg.ref_audio.includes(v.filename)) || (window._designedVoicesCache || []).some(v => voiceCfg.ref_audio.includes(v.filename))) ? 'readonly' : ''}>
+                                        <button class="btn btn-sm btn-outline-secondary clone-play-btn" onclick="playCloneVoice(this)" title="Play reference audio" style="display:${voiceCfg.ref_audio ? 'inline-block' : 'none'}"><i class="fas fa-play"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger clone-delete-btn" onclick="deleteCloneVoice(this)" title="Delete uploaded voice" style="display:${voiceCfg.ref_audio && (window._cloneVoicesCache || []).some(v => voiceCfg.ref_audio.includes(v.filename)) ? 'inline-block' : 'none'}"><i class="fas fa-trash"></i></button>
                                     </div>
                                 </div>
 
@@ -2710,18 +2725,18 @@
                                         <div class="col-md-6">
                                             <select class="form-select lora-adapter-select">
                                                 <option value="">-- Select trained adapter --</option>
-                                                ${(window._loraModelsCache || []).map(m => `<option value="${escapeHtml(m.id)}" ${config.adapter_id === m.id ? 'selected' : ''}>${m.favorite ? '★ ' : ''}${escapeHtml(m.name)}</option>`).join('')}
+                                                ${(window._loraModelsCache || []).map(m => `<option value="${escapeHtml(m.id)}" ${voiceCfg.adapter_id === m.id ? 'selected' : ''}>${m.favorite ? '★ ' : ''}${escapeHtml(m.name)}</option>`).join('')}
                                             </select>
                                         </div>
                                         <div class="col-md-6">
-                                            <input type="text" class="form-control lora-character-style" placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)" value="${escapeHtml(voiceType === 'lora' ? (config.character_style || '') : '')}">
+                                            <input type="text" class="form-control lora-character-style" placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)" value="${escapeHtml(voiceType === 'lora' ? (voiceCfg.character_style || '') : '')}">
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Voice Design Options -->
                                 <div class="design-opts" style="display: ${voiceType === 'design' ? 'block' : 'none'}">
-                                    <input type="text" class="form-control design-description mb-1" placeholder="Base voice description (e.g. Young strong soldier)" value="${escapeHtml(config.description || '')}">
+                                    <input type="text" class="form-control design-description mb-1" placeholder="Base voice description (e.g. Young strong soldier)" value="${escapeHtml(voiceCfg.description || '')}">
                                     <span class="text-muted small">Per-line instruct is appended to this description as delivery/emotion direction</span>
                                     <div class="mt-2">
                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="openVoiceDesignEditor(this)">
@@ -2732,7 +2747,7 @@
 
                                 <!-- Ensemble Options -->
                                 <div class="ensemble-opts" style="display: ${voiceType === 'ensemble' ? 'block' : 'none'}">
-                                    <div class="ensemble-members small">${ensembleMembersMarkup(voice.name, config.members)}</div>
+                                    <div class="ensemble-members small">${ensembleMembersMarkup(voice.name, voiceCfg.members)}</div>
                                     <span class="text-muted small">Each character is voiced with whatever voice it already has, then mixed together. Clips are aligned to the longest, so this sounds like a chorus rather than exact unison.</span>
                                 </div>
                             </div>
@@ -2742,8 +2757,123 @@
             `;
         }
 
-        // Suggest members for a compound name like "Petra and Subaru" or
-        // "GOD/BUDDHA/OD LAGNA": keep the parts that are real characters.
+        // --- Character states -----------------------------------------------------
+        // A character card shows its detected states as compact buttons under the
+        // name. Selecting one makes the EXISTING voice editor below edit that
+        // state: speaker = permanent identity, gender|age_group = state. The
+        // character registry (via /api/voices) stays the source of detected
+        // states; nothing here invents one.
+        window._selectedStateBySpeaker = window._selectedStateBySpeaker || {};
+
+        function characterStateKey(state) {
+            return state.state_key || `${state.gender}|${state.age_group}`;
+        }
+
+        // 'YOUNG_ADULT' -> 'Young Adult', 'MIDDLE_AGED' -> 'Middle Aged'.
+        function stateAgeLabel(ageGroup) {
+            const raw = String(ageGroup || 'UNSPECIFIED');
+            return raw.replace(/_/g, ' ').toLowerCase()
+                .replace(/(^|\s)(\S)/g, (_, sp, ch) => sp + ch.toUpperCase());
+        }
+
+        function characterStates(voice) {
+            const states = Array.isArray(voice.states) ? voice.states.slice() : [];
+            // First appearance in the story decides tab order (CHILD, TEEN, ADULT...).
+            states.sort((a, b) => (a.first_line || 0) - (b.first_line || 0));
+            return states;
+        }
+
+        function getSelectedState(voice) {
+            const states = characterStates(voice);
+            if (!states.length) { return null; }
+            const wanted = window._selectedStateBySpeaker[voice.name];
+            return states.find(s => characterStateKey(s) === wanted) || states[0];
+        }
+
+        // The voice configuration the editor should show for the selected state.
+        // An assigned state shows its own version; an unassigned one starts from
+        // the character's current voice so the editor is never blank.
+        function stateVoiceConfig(voice, state) {
+            const root = (voice && voice.config) || {};
+            if (!state) { return root; }
+            const versionId = state.voice_assignment && state.voice_assignment.version_id;
+            const version = versionId && (root.versions || {})[versionId];
+            return Object.assign({}, root, version || {});
+        }
+
+        function renderStateSelector(voice) {
+            const states = characterStates(voice);
+            // NARRATOR is driven by narrator_strategy; UNKNOWN is not assignable.
+            if (!states.length || voice.assignable === false) { return ''; }
+            const selected = getSelectedState(voice);
+            const selectedKey = characterStateKey(selected);
+            // Two states can share an age (MALE|ADULT and FEMALE|ADULT); show the
+            // gender too in that case so the buttons stay distinguishable.
+            const ageCounts = {};
+            states.forEach(s => { ageCounts[s.age_group] = (ageCounts[s.age_group] || 0) + 1; });
+            const buttons = states.map(state => {
+                const key = characterStateKey(state);
+                const isActive = key === selectedKey ? ' active' : '';
+                const label = stateAgeLabel(state.age_group)
+                    + (ageCounts[state.age_group] > 1 ? ` · ${state.gender}` : '');
+                return `<button type="button" class="btn btn-sm btn-outline-secondary state-tab${isActive}"
+                    data-speaker="${escapeHtml(voice.name)}" data-state="${escapeHtml(key)}"
+                    onclick="selectCharacterState(this)" title="${escapeHtml(key)}">${escapeHtml(label)}</button>`;
+            }).join('');
+            const lines = selected.line_count === 1 ? 'line' : 'lines';
+            return `
+                <div class="state-selector mt-1 mb-2" data-speaker="${escapeHtml(voice.name)}">
+                    <div class="btn-group btn-group-sm flex-wrap" role="group"
+                         aria-label="Detected states for ${escapeHtml(voice.display_name || voice.name)}">${buttons}</div>
+                    <div class="small text-muted mt-1">Selected state: ${escapeHtml(stateAgeLabel(selected.age_group))} · ${escapeHtml(selected.gender)} · ${selected.line_count} ${lines}</div>
+                </div>`;
+        }
+
+        // Switching state re-renders just this card so the existing editor below
+        // shows the newly selected state. Pending edits are flushed first so a
+        // quick switch cannot discard an unsaved change.
+        window.selectCharacterState = async function selectCharacterState(btn) {
+            const speaker = btn.dataset.speaker;
+            const stateKey = btn.dataset.state;
+            if (!speaker || !stateKey) { return; }
+            window._selectedStateBySpeaker[speaker] = stateKey;
+            const card = btn.closest('.voice-card');
+            if (!card) { return; }
+            const index = Number(card.dataset.voiceIndex || 0);
+            await flushPendingVoiceSave();
+            const voice = (window._voicesByName || {})[speaker];
+            if (!voice) { return; }
+            const html = createVoiceCard(voice, index);
+            const holder = document.createElement('div');
+            holder.innerHTML = html;
+            card.replaceWith(holder.firstElementChild);
+        };
+
+        // A state is edited as an ordinary saved version, addressed by
+        // state_assignments[stateKey].version_id. The character's own root config
+        // and active_version are never touched by a state edit. The id is derived
+        // from the state key so repeated saves reuse one version instead of piling
+        // up duplicates.
+        function stateVersionId(stateKey, assignedId, existingVersions) {
+            if (assignedId) { return assignedId; }
+            const base = 'state_' + String(stateKey).replace(/[^A-Za-z0-9]+/g, '_');
+            let id = base;
+            let n = 2;
+            while (existingVersions && Object.prototype.hasOwnProperty.call(existingVersions, id)) {
+                id = base + '_' + n++;
+            }
+            return id;
+        }
+
+        // Keys that describe the CHARACTER rather than one state's voice. They stay
+        // on the root config and must not be copied into a state version.
+        const CHARACTER_LEVEL_KEYS = new Set([
+            'persona_status', 'voice_status', 'active_version', 'active_candidate',
+            'age_group', 'versions', 'candidates', 'narrator_strategy',
+            'style_timeline', 'state_assignments', 'ready', 'alias_of',
+        ]);
+
+
         function suggestEnsembleMembers(name) {
             const names = window._voicesNames || [];
             const lower = new Map(names.map(n => [n.toLowerCase(), n]));
@@ -2806,12 +2936,42 @@
                 narratorSelect.value = narrator.config.narrator_strategy;
             }
             updateNarratorPreviewFields();
-            const container = document.getElementById('voices-list');
+            // Characters are filed under their registry character_type. Each character is
+            // rendered exactly once; #voices-list is left empty (kept only so the
+            // zero-voice notice has a home).
+            const voiceSections = {
+                NAMED: 'voices-list-named',
+                BACKGROUND: 'voices-list-background',
+                GROUP: 'voices-list-groups',
+                NARRATOR: 'voices-list-narrator',
+                UNKNOWN: 'voices-list-unknown',
+            };
+            Object.keys(voiceSections).forEach(type => {
+                const host = document.getElementById(voiceSections[type]);
+                if (host) { host.innerHTML = ''; }
+            });
+            const notice = document.getElementById('voices-notice');
             if (voices.length === 0) {
-                container.innerHTML = '<div class="alert alert-info">No voices found. Generate a script first.</div>';
+                if (notice) {
+                    notice.innerHTML = '<div class="alert alert-info">No voices found. Generate a script first.</div>';
+                }
                 return;
             }
-            container.innerHTML = voices.map((v, i) => createVoiceCard(v, i)).join('');
+            if (notice) { notice.innerHTML = ''; }
+            voices.forEach((voice, i) => {
+                const charType = voice.character_type || (voice.name === 'NARRATOR' ? 'NARRATOR' : 'BACKGROUND');
+                const host = document.getElementById(voiceSections[charType])
+                    || document.getElementById(voiceSections.BACKGROUND);
+                if (host) { host.insertAdjacentHTML('beforeend', createVoiceCard(voice, i)); }
+            });
+            Object.keys(voiceSections).forEach(type => {
+                const host = document.getElementById(voiceSections[type]);
+                if (!host) { return; }
+                const empty = host.children.length === 0;
+                host.style.display = empty ? 'none' : '';
+                const heading = host.previousElementSibling;
+                if (heading && heading.tagName === 'H6') { heading.style.display = empty ? 'none' : ''; }
+            });
             renderReadyCount();
             onToggleHideReady();
 
@@ -3088,11 +3248,19 @@
                     <button class="btn btn-sm btn-success flex-shrink-0" data-voice="${escapeHtml(name)}" onclick="applyVoiceSuggestion(this.dataset.voice)"><i class="fas fa-check me-1"></i>Apply</button>
                 `;
             });
-            const container = document.getElementById('voices-list');
-            Array.from(container.querySelectorAll('.voice-card'))
-                .sort((a, b) => (window._voiceSuggestions[b.dataset.voice]?.line_count || window._lineCounts[b.dataset.voice] || 0)
-                               - (window._voiceSuggestions[a.dataset.voice]?.line_count || window._lineCounts[a.dataset.voice] || 0))
-                .forEach(card => container.appendChild(card));
+            // Sort by line count, but WITHIN each character-type section so cards
+            // keep their Named / Background / Groups / Narrator / Unknown grouping.
+            const lineCount = name => (window._voiceSuggestions[name]?.line_count
+                || window._lineCounts[name] || 0);
+            const containers = Array.from(document.querySelectorAll(
+                '#voices-sections [id^="voices-list-"]'));
+            (containers.length ? containers : [document.getElementById('voices-list')])
+                .forEach(host => {
+                    if (!host) { return; }
+                    Array.from(host.querySelectorAll('.voice-card'))
+                        .sort((a, b) => lineCount(b.dataset.voice) - lineCount(a.dataset.voice))
+                        .forEach(card => host.appendChild(card));
+                });
         }
 
         function applySuggestionToCard(name) {
@@ -3624,68 +3792,88 @@
                 const metadata = (window._voicesByName && window._voicesByName[name])?.config || {};
                 const alias = card.querySelector('.alias-select') ? card.querySelector('.alias-select').value : '';
                 const type = card.querySelector('.voice-type:checked').value;
+                // Which character state this card is currently editing ('' = none).
+                const stateKey = card.dataset.stateKey || '';
+                const voice = (window._voicesByName || {})[name];
 
+                const built = {};
                 if (type === 'ensemble') {
-                    config[name] = {
-                        type: 'ensemble',
-                        members: Array.from(card.querySelectorAll('.ensemble-member:checked')).map(cb => cb.value),
-                        seed: "-1"
-                    };
+                    built.type = 'ensemble';
+                    built.members = Array.from(card.querySelectorAll('.ensemble-member:checked')).map(cb => cb.value);
+                    built.seed = "-1";
                 } else if (type === 'custom') {
-                    config[name] = {
-                        type: 'custom',
-                        voice: card.querySelector('.voice-select').value,
-                        character_style: card.querySelector('.character-style').value,
-                        seed: "-1"
-                    };
+                    built.type = 'custom';
+                    built.voice = card.querySelector('.voice-select').value;
+                    built.character_style = card.querySelector('.character-style').value;
+                    built.seed = "-1";
                 } else if (type === 'clone') {
-                    config[name] = {
-                        type: 'clone',
-                        ref_text: card.querySelector('.ref-text').value,
-                        ref_audio: card.querySelector('.ref-audio').value,
-                        seed: "-1"
-                    };
+                    built.type = 'clone';
+                    built.ref_text = card.querySelector('.ref-text').value;
+                    built.ref_audio = card.querySelector('.ref-audio').value;
+                    built.seed = "-1";
                 } else if (type === 'builtin_lora') {
                     const adapterId = card.querySelector('.builtin-lora-select').value;
                     const adapterEntry = (window._loraModelsCache || []).find(m => m.id === adapterId);
-                    config[name] = {
-                        type: 'builtin_lora',
-                        adapter_id: adapterId,
-                        adapter_path: adapterEntry?.adapter_path || '',
-                        character_style: card.querySelector('.builtin-lora-style').value,
-                        seed: "-1"
-                    };
+                    built.type = 'builtin_lora';
+                    built.adapter_id = adapterId;
+                    built.adapter_path = adapterEntry?.adapter_path || '';
+                    built.character_style = card.querySelector('.builtin-lora-style').value;
+                    built.seed = "-1";
                 } else if (type === 'lora') {
                     const adapterId = card.querySelector('.lora-adapter-select').value;
                     const adapterEntry = (window._loraModelsCache || []).find(m => m.id === adapterId);
-                    config[name] = {
-                        type: 'lora',
-                        adapter_id: adapterId,
-                        adapter_path: adapterEntry?.adapter_path || (adapterId ? `lora_models/${adapterId}` : ''),
-                        character_style: card.querySelector('.lora-character-style').value,
-                        seed: "-1"
-                    };
+                    built.type = 'lora';
+                    built.adapter_id = adapterId;
+                    built.adapter_path = adapterEntry?.adapter_path || (adapterId ? `lora_models/${adapterId}` : '');
+                    built.character_style = card.querySelector('.lora-character-style').value;
+                    built.seed = "-1";
                 } else if (type === 'design') {
-                    config[name] = {
-                        type: 'design',
-                        description: card.querySelector('.design-description').value,
-                        seed: "-1"
-                    };
+                    built.type = 'design';
+                    built.description = card.querySelector('.design-description').value;
+                    built.seed = "-1";
                 }
-                // Include alias_of if set
                 if (alias) {
-                    config[name].alias_of = alias;
+                    built.alias_of = alias;
                 }
                 const readyBox = card.querySelector('.voice-ready');
                 if (readyBox && readyBox.checked) {
-                    config[name].ready = true;
+                    built.ready = true;
                 }
-                for (const key of ['persona_status', 'voice_status', 'active_version', 'active_candidate', 'age_group', 'versions', 'candidates', 'narrator_strategy', 'style_timeline']) {
-                    if (metadata[key] !== undefined) { config[name][key] = metadata[key]; }
+                // Carry the character's own bookkeeping forward unchanged.
+                for (const key of ['persona_status', 'voice_status', 'active_version', 'active_candidate',
+                                   'age_group', 'versions', 'candidates', 'narrator_strategy',
+                                   'style_timeline', 'state_assignments']) {
+                    if (metadata[key] !== undefined) { built[key] = metadata[key]; }
+                }
+
+                if (stateKey) {
+                    // Editing a STATE: store it as an ordinary saved version and point
+                    // state_assignments at it. The character's root config and
+                    // active_version stay exactly as they were.
+                    const versions = Object.assign({}, metadata.versions || {});
+                    const assignments = Object.assign({}, metadata.state_assignments || {});
+                    const existingId = assignments[stateKey] && assignments[stateKey].version_id;
+                    const versionId = stateVersionId(stateKey, existingId, versions);
+                    const versionCfg = {};
+                    Object.keys(built).forEach(key => {
+                        if (!CHARACTER_LEVEL_KEYS.has(key)) { versionCfg[key] = built[key]; }
+                    });
+                    const state = characterStates(voice).find(s => characterStateKey(s) === stateKey);
+                    if (state && !versionCfg.age_group) { versionCfg.age_group = state.age_group; }
+                    versions[versionId] = versionCfg;
+                    assignments[stateKey] = { version_id: versionId };
+                    config[name] = Object.assign({}, metadata, {
+                        versions,
+                        state_assignments: assignments,
+                    });
+                    if (built.ready) { config[name].ready = true; }
+                } else {
+                    config[name] = built;
                 }
             });
             return config;
         }
+
 
         function onVoiceReadyChange(box) {
             const card = box.closest('.voice-card');
@@ -3715,22 +3903,37 @@
         }
 
         let _voiceSaveTimer = null;
+        async function saveVoicesNow() {
+            const statusEl = document.getElementById('voice-save-status');
+            const cards = document.querySelectorAll('.voice-card');
+            if (cards.length === 0) { return; }
+            try {
+                const config = collectVoiceConfig();
+                await API.post('/api/save_voice_config', config);
+                statusEl.innerHTML = '<i class="fas fa-check text-success me-1"></i>saved';
+                setTimeout(() => { statusEl.innerHTML = ''; }, 2000);
+            } catch (e) {
+                console.error('Failed to save voice config:', e);
+                statusEl.innerHTML = '<i class="fas fa-times text-danger me-1"></i>save failed';
+            }
+        }
+
+        // Called before a card is re-rendered (e.g. switching character state) so a
+        // pending debounced edit is written instead of thrown away by the redraw.
+        async function flushPendingVoiceSave() {
+            if (!_voiceSaveTimer) { return; }
+            clearTimeout(_voiceSaveTimer);
+            _voiceSaveTimer = null;
+            await saveVoicesNow();
+        }
+
         function saveVoicesDebounced() {
             const statusEl = document.getElementById('voice-save-status');
             statusEl.innerHTML = '<i class="fas fa-circle text-warning" style="font-size:0.5em;"></i> unsaved';
             clearTimeout(_voiceSaveTimer);
             _voiceSaveTimer = setTimeout(async () => {
-                const cards = document.querySelectorAll('.voice-card');
-                if (cards.length === 0) { return; }
-                try {
-                    const config = collectVoiceConfig();
-                    await API.post('/api/save_voice_config', config);
-                    statusEl.innerHTML = '<i class="fas fa-check text-success me-1"></i>saved';
-                    setTimeout(() => { statusEl.innerHTML = ''; }, 2000);
-                } catch (e) {
-                    console.error('Failed to save voice config:', e);
-                    statusEl.innerHTML = '<i class="fas fa-times text-danger me-1"></i>save failed';
-                }
+                _voiceSaveTimer = null;
+                await saveVoicesNow();
             }, 800);
         }
 

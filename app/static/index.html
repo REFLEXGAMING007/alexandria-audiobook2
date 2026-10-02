@@ -1591,7 +1591,50 @@
                         <button class="btn btn-outline-secondary" id="btn-clear-suggestions" onclick="clearVoiceSuggestions()" style="display:none;"><i class="fas fa-xmark me-1"></i>Dismiss</button>
                         <span id="suggest-status" class="text-muted small"></span>
                     </div>
-                    <div id="voices-list"></div>
+                    <div class="mb-3">
+                        <label class="small text-muted me-2">Scope:</label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="voice-scope" id="voice-scope-all" value="all" checked onchange="refreshVoicesScope()">
+                            <label class="form-check-label small" for="voice-scope-all">All</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="voice-scope" id="voice-scope-new" value="new" onchange="refreshVoicesScope()">
+                            <label class="form-check-label small" for="voice-scope-new">New only</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="voices-hide-ready" onchange="onToggleHideReady()">
+                            <label class="form-check-label small" for="voices-hide-ready">Hide ready</label>
+                        </div>
+                    </div>
+                    <!-- #voices-list wraps every character-type section: the Voices tab
+                         delegates its change/input auto-save from this element, so any
+                         card rendered into a section below must stay inside it. -->
+                    <div id="voices-list">
+                        <div id="voices-notice"></div>
+                        <!-- Character type sections -->
+                        <div id="voices-sections">
+                        <div id="voices-section-named" class="voices-section">
+                            <h6 class="fw-bold mb-2">Named Characters</h6>
+                            <div id="voices-list-named"></div>
+                        </div>
+                        <div id="voices-section-background" class="voices-section">
+                            <h6 class="fw-bold mb-2">Background Characters</h6>
+                            <div id="voices-list-background"></div>
+                        </div>
+                        <div id="voices-section-groups" class="voices-section">
+                            <h6 class="fw-bold mb-2">Groups</h6>
+                            <div id="voices-list-groups"></div>
+                        </div>
+                        <div id="voices-section-narrator" class="voices-section">
+                            <h6 class="fw-bold mb-2">Narrator</h6>
+                            <div id="voices-list-narrator"></div>
+                        </div>
+                        <div id="voices-section-unknown" class="voices-section">
+                            <h6 class="fw-bold mb-2">Unknown</h6>
+                            <div id="voices-list-unknown"></div>
+                        </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
