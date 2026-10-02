@@ -96,6 +96,8 @@ class VoiceConfigItem(BaseModel):
     # Identity anchors that take over from a line onward (tts.active_character_style):
     # [{"from_index": N, "character_style": "..."}]. Set from the Editor.
     style_timeline: List[Dict] = Field(default_factory=list)
+    # State-specific voice version assignments (Character Registry states -> version_id)
+    state_assignments: Dict[str, Dict] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_ensemble_members(self):
@@ -182,6 +184,10 @@ class NarratorPreviewRequest(BaseModel):
 class VoiceApprovalRequest(BaseModel):
     persona_status: Optional[str] = Field(default=None, pattern="^(unreviewed|generated|reviewed|approved|rejected)$")
     voice_status: Optional[str] = Field(default=None, pattern="^(unreviewed|generated|reviewed|approved|rejected)$")
+
+
+class StateAssignmentRequest(BaseModel):
+    version_id: str = Field(min_length=1, max_length=80)
 
 
 class PersonaVoiceAuditRequest(BaseModel):
@@ -326,7 +332,18 @@ async def get_voices():
                 states = char_data.get("states", {})
                 if states:
                     ordered_states = _order_states_by_first_appearance(states)
-                    voice_card["states"] = ordered_states
+                    # Enhance states with state assignment info from voice_config
+                    state_assignments = config.get("state_assignments", {})
+                    enhanced_states = []
+                    for state in ordered_states:
+                        state_key = state.get("state_key")
+                        enhanced_state = dict(state)
+                        if state_key and state_key in state_assignments:
+                            enhanced_state["voice_assignment"] = state_assignments[state_key]
+                        else:
+                            enhanced_state["voice_assignment"] = None
+                        enhanced_states.append(enhanced_state)
+                    voice_card["states"] = enhanced_states
                 else:
                     voice_card["states"] = []
 
@@ -421,7 +438,170 @@ async def favorite_voice_candidate(speaker: str, candidate_id: str,
                               if c.get("candidate_id") == candidate_id)}
 
 
-@router.post("/api/narrator/strategy")
+# --- State-specific voice assignments ------------------------------------------
+
+def _validate_state_key(state_key: str) -> bool:
+    """Validate that a state_key matches GENDER|AGE_GROUP format."""
+    if not state_key or "|" not in state_key:
+        return False
+    gender, age_group = state_key.split("|", 1)
+    valid_genders = {"MALE", "FEMALE", "UNSPECIFIED"}
+    valid_age_groups = {"CHILD", "TEEN", "YOUNG_ADULT", "ADULT", "MIDDLE_AGED", "ELDERLY", "AGELESS", "UNSPECIFIED"}
+    return gender in valid_genders and age_group in valid_age_groups
+
+
+def _get_speaker_registry_states(speaker: str, registry: Optional[Dict]) -> Optional[Dict]:
+    """Get the states for a speaker from the character registry."""
+    if not registry or "characters" not in registry:
+        return None
+    char_data = registry["characters"].get(speaker)
+    if not char_data:
+        return None
+    return char_data.get("states")
+
+
+@router.post("/api/voices/{speaker}/states/{state_key}/assignment")
+async def save_state_assignment(speaker: str, state_key: str, request: StateAssignmentRequest):
+    """Assign a voice version to a character state."""
+    _require_script_speaker(speaker)
+
+    # Validate state_key format
+    if not _validate_state_key(state_key):
+        raise HTTPException(status_code=422, detail=f"Invalid state_key format: {state_key}. Expected GENDER|AGE_GROUP")
+
+    # Exclude NARRATOR from state assignments
+    if speaker.upper() == "NARRATOR":
+        raise HTTPException(status_code=422, detail="NARRATOR uses narrator_strategy, not state assignments")
+
+    def assign(entry):
+        # Validate version exists
+        versions = entry.get("versions", {})
+        if request.version_id not in versions:
+            raise HTTPException(status_code=404, detail=f"Voice version '{request.version_id}' not found for speaker '{speaker}'")
+
+        # Validate state exists in registry
+        script_entries = _load_script_entries()
+        registry = _load_or_build_registry(script_entries)
+        states = _get_speaker_registry_states(speaker, registry)
+
+        if states is not None and state_key not in states:
+            # Check if UNKNOWN and assignable=false
+            if speaker.upper() == "UNKNOWN":
+                raise HTTPException(status_code=422, detail="UNKNOWN state assignments are not permitted")
+            raise HTTPException(status_code=422, detail=f"State '{state_key}' not found in character registry for speaker '{speaker}'")
+
+        # Ensure state_assignments dict exists
+        if "state_assignments" not in entry:
+            entry["state_assignments"] = {}
+
+        # Assign the version to the state
+        entry["state_assignments"][state_key] = {"version_id": request.version_id}
+
+    entry = _mutate_voice_entry(speaker, assign)
+    assignment = entry.get("state_assignments", {}).get(state_key, {})
+    return {"status": "saved", "speaker": speaker, "state_key": state_key, "version_id": request.version_id, "assignment": assignment}
+
+
+@router.get("/api/voices/{speaker}/states/{state_key}/assignment")
+async def get_state_assignment(speaker: str, state_key: str):
+    """Get the voice version assigned to a character state."""
+    _require_script_speaker(speaker)
+
+    # Validate state_key format
+    if not _validate_state_key(state_key):
+        raise HTTPException(status_code=422, detail=f"Invalid state_key format: {state_key}. Expected GENDER|AGE_GROUP")
+
+    # Exclude NARRATOR from state assignments
+    if speaker.upper() == "NARRATOR":
+        raise HTTPException(status_code=422, detail="NARRATOR uses narrator_strategy, not state assignments")
+
+    config = safe_load_json(VOICE_CONFIG_PATH, default={})
+    entry = config.get(speaker, {})
+    assignment = entry.get("state_assignments", {}).get(state_key)
+
+    if not assignment:
+        return {"status": "unassigned", "speaker": speaker, "state_key": state_key}
+
+    return {"status": "assigned", "speaker": speaker, "state_key": state_key, **assignment}
+
+
+@router.delete("/api/voices/{speaker}/states/{state_key}/assignment")
+async def delete_state_assignment(speaker: str, state_key: str):
+    """Remove a state assignment, restoring fallback to root/active version."""
+    _require_script_speaker(speaker)
+
+    # Validate state_key format
+    if not _validate_state_key(state_key):
+        raise HTTPException(status_code=422, detail=f"Invalid state_key format: {state_key}. Expected GENDER|AGE_GROUP")
+
+    # Exclude NARRATOR from state assignments
+    if speaker.upper() == "NARRATOR":
+        raise HTTPException(status_code=422, detail="NARRATOR uses narrator_strategy, not state assignments")
+
+    def remove(entry):
+        state_assignments = entry.get("state_assignments", {})
+        if state_key in state_assignments:
+            del state_assignments[state_key]
+            # Clean up empty dict
+            if not state_assignments:
+                entry.pop("state_assignments", None)
+
+    entry = _mutate_voice_entry(speaker, remove)
+    return {"status": "deleted", "speaker": speaker, "state_key": state_key}
+
+
+# --- Effective voice config resolution helper ----------------------------------
+
+def resolve_voice_config_for_state(speaker: str, state_key: Optional[str] = None,
+                                   voice_config: Optional[Dict] = None) -> Dict:
+    """
+    Resolve the effective voice configuration for a speaker, optionally for a specific state.
+
+    Resolution order:
+    1. If state_key provided and explicit state assignment exists -> return assigned version config
+    2. Otherwise return existing speaker configuration (active_version or root config)
+
+    This helper is intended for future TTS and UI integration.
+    """
+    if voice_config is None:
+        voice_config = safe_load_json(VOICE_CONFIG_PATH, default={})
+
+    entry = voice_config.get(speaker, {})
+
+    # If state_key provided and explicit state assignment exists
+    if state_key:
+        state_assignments = entry.get("state_assignments", {})
+        assignment = state_assignments.get(state_key)
+        if assignment and isinstance(assignment, dict):
+            version_id = assignment.get("version_id")
+            if version_id:
+                versions = entry.get("versions", {})
+                version_config = versions.get(version_id)
+                if version_config:
+                    # Return a merged config: base entry updated with version-specific fields
+                    resolved = dict(entry)
+                    for k, v in version_config.items():
+                        if k != "age_group":  # age_group handled separately
+                            resolved[k] = v
+                    resolved["age_group"] = version_config.get("age_group")
+                    resolved["state_key"] = state_key
+                    resolved["resolved_from_state"] = True
+                    return resolved
+
+    # Fallback to existing speaker configuration (active_version or root)
+    resolved = dict(entry)
+    active_version = entry.get("active_version")
+    if active_version:
+        versions = entry.get("versions", {})
+        version_config = versions.get(active_version)
+        if version_config:
+            for k, v in version_config.items():
+                if k != "age_group":
+                    resolved[k] = v
+            resolved["age_group"] = version_config.get("age_group")
+            resolved["resolved_from_active_version"] = True
+
+    return resolved
 async def save_narrator_strategy(request: NarratorStrategyRequest):
     _require_script_speaker("NARRATOR")
     entry = _mutate_voice_entry("NARRATOR", lambda current: current.update({
