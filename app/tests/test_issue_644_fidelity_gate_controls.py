@@ -80,5 +80,84 @@ class FidelityGateControlTests(unittest.TestCase):
         self.assertNotEqual(quoted_relaxed, unquoted_relaxed)
 
 
+class DefaultConfigMatchesSemanticPass1Tests(unittest.TestCase):
+    """Pass 1 now classifies speech by meaning, not by quote marks
+    (default_prompts_segment.txt): quoted signage may be NARRATOR and an
+    unquoted cry may be SPOKEN. The committed defaults must accept that, so a
+    fresh install does not reject exactly what the shipped prompt asks for."""
+
+    SOURCE = ('He saw the sign. "KEEP OUT." The guard turned. '
+              'Then the unquoted cry rang out. Haaaaaah—!')
+
+    SEMANTIC = [
+        {"type": "NARRATOR", "text": "He saw the sign. "},
+        {"type": "NARRATOR", "text": "KEEP OUT."},
+        {"type": "NARRATOR", "text": " The guard turned. "
+                                     "Then the unquoted cry rang out. "},
+        {"type": "SPOKEN", "text": "Haaaaaah—!"},
+    ]
+
+    def _resolved(self, generation):
+        return tp.resolve_three_pass_generation_settings(
+            {"generation": generation}, None)
+
+    def test_generation_config_defaults_disable_both_quote_rules(self):
+        from config_settings import GenerationConfig
+        gen = GenerationConfig()
+        self.assertFalse(gen.three_pass_quoted_must_be_spoken)
+        self.assertFalse(gen.three_pass_unquoted_must_be_narrator)
+
+    def test_fresh_config_resolves_to_the_semantic_gate(self):
+        # No generation keys at all: the fallback must not resurrect the
+        # mechanical rule.
+        settings = self._resolved({})
+        self.assertFalse(settings["quoted_must_be_spoken"])
+        self.assertFalse(settings["unquoted_must_be_narrator"])
+
+    def test_default_settings_accept_unquoted_speech_and_quoted_narration(self):
+        settings = self._resolved({})
+        report = validate_segment_quality(
+            self.SOURCE, self.SEMANTIC,
+            quoted_must_be_spoken=settings["quoted_must_be_spoken"],
+            unquoted_must_be_narrator=settings["unquoted_must_be_narrator"])
+        self.assertTrue(report["passed"], report["findings"])
+
+    def test_default_segmentation_auto_asks_the_model(self):
+        # With a quote rule relaxed, "auto" must not pre-segment by marks.
+        settings = self._resolved({})
+        self.assertEqual("auto", settings["segmentation"])
+        entries, resolution = tp.quote_regions_decision(
+            settings["segmentation"], self.SOURCE, None,
+            quoted_must_be_spoken=settings["quoted_must_be_spoken"],
+            unquoted_must_be_narrator=settings["unquoted_must_be_narrator"])
+        self.assertIsNone(entries)
+        self.assertIsNone(resolution)
+
+    def test_explicit_true_still_restores_the_strict_mechanical_gate(self):
+        settings = self._resolved({
+            "three_pass_quoted_must_be_spoken": True,
+            "three_pass_unquoted_must_be_narrator": True,
+        })
+        self.assertTrue(settings["quoted_must_be_spoken"])
+        self.assertTrue(settings["unquoted_must_be_narrator"])
+        report = validate_segment_quality(
+            self.SOURCE, self.SEMANTIC,
+            quoted_must_be_spoken=True, unquoted_must_be_narrator=True)
+        self.assertFalse(report["passed"])
+        self.assertTrue(
+            {"quote_region_misclassified", "crosses_quote_boundary"}
+            & {finding["code"] for finding in report["findings"]},
+            report["findings"])
+
+    def test_explicit_true_restores_auto_pre_segmentation(self):
+        # The strict path is still reachable: both rules on, "auto" decides by
+        # quote marks again.
+        entries, resolution = tp.quote_regions_decision(
+            "auto", QUOTED_TERM, tp.analyze_outer_quote_regions(QUOTED_TERM),
+            quoted_must_be_spoken=True, unquoted_must_be_narrator=True)
+        self.assertIsNotNone(entries)
+        self.assertIsNotNone(resolution)
+
+
 if __name__ == "__main__":
     unittest.main()

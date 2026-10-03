@@ -145,8 +145,17 @@ class GenerationConfig(BaseModel):
     # whatever it holds; only a fresh one gets the new default.
     three_pass_attribute_prompt_variant: PromptVariant = "michel2_full"
     three_pass_segmentation: SegmentationMode = "auto"
-    three_pass_quoted_must_be_spoken: bool = True
-    three_pass_unquoted_must_be_narrator: bool = True
+    # Pass 1 classifies speech by MEANING, not by quote marks (see
+    # default_prompts_segment.txt: quoted signage may be NARRATOR, unquoted
+    # vocalizations may be SPOKEN). These two controls pin the quote-region
+    # gate to the old mechanical rule, which would reject exactly the answers
+    # the prompt now asks for, so a fresh config must default both to False.
+    # Source coverage, ordering, duplication, Unicode, schema and size checks
+    # are unaffected. Setting either back to True restores the strict rule.
+    # With both False, "auto" above already routes the chunk to the model
+    # (quote_regions_decision), so it needs no change to mean "ask the LLM".
+    three_pass_quoted_must_be_spoken: bool = False
+    three_pass_unquoted_must_be_narrator: bool = False
     three_pass_attribute_skip_attestation_check: bool = False
     three_pass_model_profiles: Dict[str, ThreePassModelProfile] = Field(default_factory=dict)
 

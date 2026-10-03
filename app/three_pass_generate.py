@@ -145,10 +145,13 @@ def resolve_three_pass_generation_settings(config, chunk_size_override=None,
             "segment_output_ratio", gen.get("three_pass_segment_output_ratio", 3.0)),
         "segmentation": segmentation_override or model_profile.get(
             "segmentation", gen.get("three_pass_segmentation") or "auto"),
+        # Defaults mirror GenerationConfig: pass 1 now classifies by meaning,
+        # so the quote-region gate is off unless a config asks for it. An
+        # explicit True in the config still restores the strict mechanical rule.
         "quoted_must_be_spoken": gen.get(
-            "three_pass_quoted_must_be_spoken", True) is not False,
+            "three_pass_quoted_must_be_spoken", False) is not False,
         "unquoted_must_be_narrator": gen.get(
-            "three_pass_unquoted_must_be_narrator", True) is not False,
+            "three_pass_unquoted_must_be_narrator", False) is not False,
         "attribute_skip_attestation_check": gen.get(
             "three_pass_attribute_skip_attestation_check", False) is not False,
         "attribute_batch_size": int(gen.get("three_pass_attribute_batch_size", BATCH_SIZE)),
