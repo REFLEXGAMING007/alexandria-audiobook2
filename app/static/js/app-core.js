@@ -2849,6 +2849,148 @@
             card.replaceWith(holder.firstElementChild);
         };
 
+        // --- Voices filter bar -----------------------------------------------------
+        // Purely a UI concern: narrows which character cards are shown and, when a
+        // state filter is active, selects the matching state on each shown card.
+        // It never writes voice configuration - that only happens through the
+        // ordinary editor controls and the existing save.
+        window._voiceFilters = Object.assign(
+            { age: '', gender: '', characterType: '', assignment: '', stateCount: '' },
+            window._voiceFilters || {});
+
+        function getVoiceFilterState() { return window._voiceFilters; }
+
+        function readVoiceFilters() {
+            const f = window._voiceFilters;
+            f.age = (document.getElementById('vf-age')?.value || '');
+            f.gender = (document.getElementById('vf-gender')?.value || '');
+            f.characterType = (document.getElementById('vf-character-type')?.value || '');
+            f.assignment = (document.getElementById('vf-assignment')?.value || '');
+            f.stateCount = (document.getElementById('vf-state-count')?.value || '');
+            return f;
+        }
+
+        // Age / Gender / Assignment are STATE properties; a state must satisfy all
+        // of them at once for the character to match.
+        function stateMatchesStateFilters(state, f) {
+            if (f.age && state.age_group !== f.age) { return false; }
+            if (f.gender && state.gender !== f.gender) { return false; }
+            const assigned = !!(state.voice_assignment && state.voice_assignment.version_id);
+            if (f.assignment === 'assigned' && !assigned) { return false; }
+            if (f.assignment === 'unassigned' && assigned) { return false; }
+            return true;
+        }
+
+        function hasStateFilters(f) { return !!(f.age || f.gender || f.assignment); }
+
+        function getMatchingStates(voice, f) {
+            return characterStates(voice).filter(s => stateMatchesStateFilters(s, f));
+        }
+
+        function matchesVoiceFilters(voice, f) {
+            const charType = voice.character_type
+                || (voice.name === 'NARRATOR' ? 'NARRATOR' : 'BACKGROUND');
+            if (f.characterType && charType !== f.characterType) { return false; }
+            const states = characterStates(voice);
+            if (f.stateCount === 'single' && states.length !== 1) { return false; }
+            if (f.stateCount === 'multiple' && states.length < 2) { return false; }
+            if (hasStateFilters(f)) { return getMatchingStates(voice, f).length > 0; }
+            return true;
+        }
+
+        // The state a filter asks us to put this card into. Deterministic:
+        // keep the current one when it qualifies, else the earliest match by
+        // story position. Returns null when no state filter is active, so the
+        // user's manual choice is preserved.
+        function filterTargetState(voice, f) {
+            if (!hasStateFilters(f)) { return null; }
+            const matching = getMatchingStates(voice, f);
+            if (!matching.length) { return null; }
+            const currentKey = window._selectedStateBySpeaker[voice.name];
+            const current = characterStates(voice).find(s => characterStateKey(s) === currentKey);
+            if (current && matching.some(s => characterStateKey(s) === currentKey)) {
+                return null;
+            }
+            return matching[0];   // characterStates() is already first-appearance ordered
+        }
+
+        // Single source of truth for card visibility: the new filters AND the
+        // pre-existing "Hide ready" rule. Both used to write style.display
+        // directly, which let them overwrite each other.
+        function updateVoiceCardVisibility() {
+            const f = readVoiceFilters();
+            const hideReady = !!document.getElementById('voices-hide-ready')?.checked;
+            let shown = 0;
+            document.querySelectorAll('#voices-list .voice-card').forEach(card => {
+                const voice = (window._voicesByName || {})[card.dataset.voice];
+                let visible = true;
+                if (voice) { visible = matchesVoiceFilters(voice, f); }
+                if (visible && hideReady && card.dataset.ready === '1') { visible = false; }
+                card.style.display = visible ? '' : 'none';
+                if (visible) { shown++; }
+            });
+            updateVoiceSectionVisibility();
+        }
+
+        // A section hides when it holds no VISIBLE card (filtered out counts too).
+        function updateVoiceSectionVisibility() {
+            const sections = document.querySelectorAll('#voices-sections .voices-section');
+            let shown = 0;
+            sections.forEach(section => {
+                const cards = Array.from(section.querySelectorAll('.voice-card'));
+                const visible = cards.filter(c => c.style.display !== 'none').length;
+                if (visible) { shown++; }
+                section.style.display = visible ? '' : 'none';
+                const heading = section.querySelector('h6');
+                if (heading) { heading.style.display = visible ? '' : 'none'; }
+            });
+            const summary = document.getElementById('vf-summary');
+            if (summary) {
+                const total = document.querySelectorAll('#voices-list .voice-card').length;
+                summary.textContent = shown ? `${shown} of ${total} characters` : '';
+            }
+            return shown;
+        }
+
+        async function applyVoiceFilters() {
+            const f = readVoiceFilters();
+            const rerenders = [];
+            document.querySelectorAll('#voices-list .voice-card').forEach(card => {
+                const voice = (window._voicesByName || {})[card.dataset.voice];
+                if (!voice || !matchesVoiceFilters(voice, f)) { return; }
+                const target = filterTargetState(voice, f);
+                if (!target) { return; }
+                const key = characterStateKey(target);
+                if (window._selectedStateBySpeaker[voice.name] === key) { return; }
+                window._selectedStateBySpeaker[voice.name] = key;
+                rerenders.push({ card, voice, index: Number(card.dataset.voiceIndex || 0) });
+            });
+            if (rerenders.length) {
+                // Only flushes when the user already had an unsaved edit pending
+                // (the debounced save would have written it anyway); with nothing
+                // pending this causes no save at all.
+                await flushPendingVoiceSave();
+                rerenders.forEach(({ card, voice, index }) => {
+                    const holder = document.createElement('div');
+                    holder.innerHTML = createVoiceCard(voice, index);
+                    const fresh = holder.firstElementChild;
+                    card.replaceWith(fresh);
+                    fresh.style.display = '';
+                });
+            }
+            updateVoiceCardVisibility();
+        }
+
+        function onVoiceFilterChange() { applyVoiceFilters(); }
+
+        function clearVoiceFilters() {
+            ['vf-age', 'vf-gender', 'vf-character-type', 'vf-assignment', 'vf-state-count']
+                .forEach(id => { const el = document.getElementById(id); if (el) { el.value = ''; } });
+            window._voiceFilters = { age: '', gender: '', characterType: '', assignment: '', stateCount: '' };
+            // Manual state selection is restored: nothing forces a state now.
+            updateVoiceCardVisibility();
+        }
+
         // A state is edited as an ordinary saved version, addressed by
         // state_assignments[stateKey].version_id. The character's own root config
         // and active_version are never touched by a state edit. The id is derived
@@ -2964,16 +3106,14 @@
                     || document.getElementById(voiceSections.BACKGROUND);
                 if (host) { host.insertAdjacentHTML('beforeend', createVoiceCard(voice, i)); }
             });
-            Object.keys(voiceSections).forEach(type => {
-                const host = document.getElementById(voiceSections[type]);
-                if (!host) { return; }
-                const empty = host.children.length === 0;
-                host.style.display = empty ? 'none' : '';
-                const heading = host.previousElementSibling;
-                if (heading && heading.tagName === 'H6') { heading.style.display = empty ? 'none' : ''; }
-            });
             renderReadyCount();
-            onToggleHideReady();
+            // Applies the filter bar (and the "Hide ready" rule) to the fresh cards,
+            // and moves each shown card into the state its filter selected.
+            if (typeof applyVoiceFilters === 'function') {
+                await applyVoiceFilters();
+            } else {
+                onToggleHideReady();
+            }
 
             // If any voice has no saved config, save defaults immediately
             if (voices.some(v => !v.config || Object.keys(v.config).length === 0)) {
@@ -3896,6 +4036,12 @@
         }
 
         function onToggleHideReady() {
+            // Visibility is computed in one place so "Hide ready" and the filter bar
+            // cannot overwrite each other's display.
+            if (typeof updateVoiceCardVisibility === 'function') {
+                updateVoiceCardVisibility();
+                return;
+            }
             const hide = !!document.getElementById('voices-hide-ready')?.checked;
             document.querySelectorAll('.voice-card').forEach(card => {
                 card.style.display = hide && card.dataset.ready === '1' ? 'none' : '';

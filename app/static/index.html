@@ -1591,6 +1591,66 @@
                         <button class="btn btn-outline-secondary" id="btn-clear-suggestions" onclick="clearVoiceSuggestions()" style="display:none;"><i class="fas fa-xmark me-1"></i>Dismiss</button>
                         <span id="suggest-status" class="text-muted small"></span>
                     </div>
+                    <!-- Voices filter bar: narrows the character cards and, when a
+                         state filter is active, puts each matching card into the state
+                         that made it match so the user can work straight down the list. -->
+                    <div class="mb-3" id="voices-filter-bar">
+                        <label class="small text-muted me-2">Filter:</label>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div class="input-group input-group-sm" style="width: 170px;">
+                                <span class="input-group-text">Age</span>
+                                <select class="form-select" id="vf-age" onchange="onVoiceFilterChange()">
+                                    <option value="">Any</option>
+                                    <option value="CHILD">Child</option>
+                                    <option value="TEEN">Teen</option>
+                                    <option value="YOUNG_ADULT">Young Adult</option>
+                                    <option value="ADULT">Adult</option>
+                                    <option value="MIDDLE_AGED">Middle Aged</option>
+                                    <option value="ELDERLY">Elderly</option>
+                                    <option value="AGELESS">Ageless</option>
+                                    <option value="UNSPECIFIED">Unspecified</option>
+                                </select>
+                            </div>
+                            <div class="input-group input-group-sm" style="width: 165px;">
+                                <span class="input-group-text">Gender</span>
+                                <select class="form-select" id="vf-gender" onchange="onVoiceFilterChange()">
+                                    <option value="">Any</option>
+                                    <option value="MALE">Male</option>
+                                    <option value="FEMALE">Female</option>
+                                    <option value="UNSPECIFIED">Unspecified</option>
+                                </select>
+                            </div>
+                            <div class="input-group input-group-sm" style="width: 185px;">
+                                <span class="input-group-text">Character Type</span>
+                                <select class="form-select" id="vf-character-type" onchange="onVoiceFilterChange()">
+                                    <option value="">Any</option>
+                                    <option value="NAMED">Named</option>
+                                    <option value="BACKGROUND">Background</option>
+                                    <option value="GROUP">Group</option>
+                                    <option value="NARRATOR">Narrator</option>
+                                    <option value="UNKNOWN">Unknown</option>
+                                </select>
+                            </div>
+                            <div class="input-group input-group-sm" style="width: 195px;">
+                                <span class="input-group-text">Voice Assignment</span>
+                                <select class="form-select" id="vf-assignment" onchange="onVoiceFilterChange()">
+                                    <option value="">Any</option>
+                                    <option value="assigned">Assigned</option>
+                                    <option value="unassigned">Unassigned</option>
+                                </select>
+                            </div>
+                            <div class="input-group input-group-sm" style="width: 175px;">
+                                <span class="input-group-text">States</span>
+                                <select class="form-select" id="vf-state-count" onchange="onVoiceFilterChange()">
+                                    <option value="">Any</option>
+                                    <option value="single">Single State</option>
+                                    <option value="multiple">Multiple States</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" id="vf-clear" onclick="clearVoiceFilters()">Clear Filters</button>
+                            <span class="small text-muted" id="vf-summary"></span>
+                        </div>
+                    </div>
                     <div class="mb-3">
                         <label class="small text-muted me-2">Scope:</label>
                         <div class="form-check form-check-inline">
