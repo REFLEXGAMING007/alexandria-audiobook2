@@ -312,3 +312,6 @@ chunagon.md
 chunagon.txt
 chunagon.txt.*
 alexandria-private-evaluation/
+annotated_script.json.threepass_checkpoint.json
+annotated_script.json.threepass_manifest.json
+manual_llm/
