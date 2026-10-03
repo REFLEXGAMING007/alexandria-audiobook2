@@ -157,6 +157,7 @@ def resolve_three_pass_generation_settings(config, chunk_size_override=None,
         "keep_scope": "batch" if gen.get("three_pass_keep_whole_batch") is True else "line",
         "attribute_batch_size": int(gen.get("three_pass_attribute_batch_size", BATCH_SIZE)),
         "attribute_context_chars": int(gen.get("three_pass_attribute_context_chars", 2000)),
+        "instruct_batch_size": int(gen.get("three_pass_instruct_batch_size", BATCH_SIZE)),
         "attribute_prompt_variant": gen.get("three_pass_attribute_prompt_variant") or "michel2_full",
     }
 
@@ -1390,7 +1391,8 @@ def get_three_pass_planned_calls(source_text, settings, params):
               "text": entry["text"]} for entry in predicted]
     return {1: len(unresolved),
             2: attribute_calls * settings.get("attribution_votes", 1),
-            3: sum(1 for _ in iter_unique_entry_batches(named))}
+            3: sum(1 for _ in iter_unique_entry_batches(
+                named, int(settings.get("instruct_batch_size") or BATCH_SIZE)))}
 
 
 def build_three_pass_request_preflight(source_text, settings, context_length,
@@ -1486,7 +1488,8 @@ def build_three_pass_request_preflight(source_text, settings, context_length,
                                    else "NARRATOR"),
                       "text": entry["text"]}
                      for entry in predicted_entries]
-    for indexed_batch in iter_unique_entry_batches(named_entries):
+    instruct_batch_size = int(settings.get("instruct_batch_size") or BATCH_SIZE)
+    for indexed_batch in iter_unique_entry_batches(named_entries, instruct_batch_size):
         batch = [entry for _, entry in indexed_batch]
         contexts = [{
             "previous_context": named_entries[index - 1] if index else None,
@@ -1786,7 +1789,8 @@ def three_pass_fingerprint(source_text, model_name, chunk_size, params=None,
                            on_exhaustion="fail", context_windows=None,
                            context_rescue_retries=None, endpoint=None,
                            collect_all_failures=False, attribute_batch_size=BATCH_SIZE,
-                           attribute_context_chars=0, attribute_prompt_variant="default",
+                           attribute_context_chars=0, instruct_batch_size=BATCH_SIZE,
+                           attribute_prompt_variant="default",
                            attribute_prompt_texts=None, cast_sha256=None,
                            attribution_votes=1, vote_temperature=0.3,
                            first_person_narrator=None, speaker_traits=False):
@@ -1813,6 +1817,8 @@ def three_pass_fingerprint(source_text, model_name, chunk_size, params=None,
            if attribute_batch_size != BATCH_SIZE else {}),
         **({"attribute_context_chars": attribute_context_chars}
            if attribute_context_chars else {}),
+        **({"instruct_batch_size": instruct_batch_size}
+           if instruct_batch_size != BATCH_SIZE else {}),
         **({"attribute_prompt_variant": attribute_prompt_variant}
            if attribute_prompt_variant not in (None, "default") else {}),
         # a preset with its own text is a different prompt; a builtin is not
@@ -1977,6 +1983,7 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
                    unicode_report=None, attribution_votes=1,
                    vote_temperature=0.3, first_person_narrator=None,
                    attribute_batch_size=BATCH_SIZE, attribute_context_chars=0,
+                   instruct_batch_size=BATCH_SIZE,
                    attribute_prompt_variant="default", attribute_prompt_texts=None,
                    planned_calls=None, cast=None, keep_scope="line", speaker_traits=False):
     """Full flow. Returns the assembled [{speaker,text,instruct}] list, or raises
@@ -1987,7 +1994,8 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
     override the context-rescue defaults (finding #12). attribute_batch_size
     is the pass-2 window (entries per request); attribute_context_chars is how
     much of the book either side of the window is shown as evidence (0 = the
-    window alone, the measured default); attribute_prompt_variant names one
+    window alone, the measured default); instruct_batch_size is the pass-3 window
+    (entries per request); attribute_prompt_variant names one
     of attribution_prompt_variants.VARIANTS ("default" = the shipped prompt)
     and attribute_prompt_texts is the active preset's {"system", "user",
     "example"} (None = the variant's builtin texts). A preset with edited
@@ -2024,6 +2032,7 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
         context_windows, context_rescue_retries, endpoint, collect_all_failures,
         attribute_batch_size=attribute_batch_size,
         attribute_context_chars=attribute_context_chars,
+        instruct_batch_size=instruct_batch_size,
         attribute_prompt_variant=attribute_prompt_variant,
         attribute_prompt_texts=attribute_prompt_texts,
         cast_sha256=(cast or {}).get("sha256"),
@@ -2442,12 +2451,12 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
             annotated[index] = {**entry, "instruct": default_instruct(entry)}
     inst_start = time.time()
     inst_base = elapsed_s.get("instruct", 0)
-    window_total = sum(1 for _ in iter_unique_entry_batches(named))
+    window_total = sum(1 for _ in iter_unique_entry_batches(named, instruct_batch_size))
     window_number = 0
     instruction_progress_reported = False
     if progress:
         model_total, model_done = 0, 0
-        for indexed_batch in iter_unique_entry_batches(named):
+        for indexed_batch in iter_unique_entry_batches(named, instruct_batch_size):
             model_indices = [index for index, entry in indexed_batch
                              if not is_nonverbal_text(entry.get("text"))]
             if not model_indices:
@@ -2456,7 +2465,7 @@ def run_three_pass(client, model_name, source_text, params, chunk_size,
             model_done += all(annotated[index] is not None for index in model_indices)
         progress.set_total(3, model_total)
         progress.restore_done(3, model_done)
-    for indexed_batch in iter_unique_entry_batches(named):
+    for indexed_batch in iter_unique_entry_batches(named, instruct_batch_size):
         window_number += 1
         pending = [(index, entry) for index, entry in indexed_batch
                    if annotated[index] is None]
@@ -2853,6 +2862,9 @@ def main():
     parser.add_argument("--attribute-context-chars", type=int, default=None,
                         help="Override generation.three_pass_attribute_context_chars "
                              "(characters of the book shown either side of each pass-2 window)")
+    parser.add_argument("--instruct-batch-size", type=int, default=None,
+                            help="Override generation.three_pass_instruct_batch_size "
+                                 "(entries per pass-3 request)")
     parser.add_argument("--prompt-variant", default=None,
                         help="Override generation.three_pass_attribute_prompt_variant "
                              "(one of attribution_prompt_variants.VARIANTS)")
@@ -2949,8 +2961,10 @@ def main():
                             else generation_settings["attribute_batch_size"])
     attribute_context_chars = (args.attribute_context_chars if args.attribute_context_chars is not None
                                else generation_settings["attribute_context_chars"])
-    if attribute_batch_size < 1 or attribute_context_chars < 0:
-        raise SystemExit("attribute batch size must be >= 1 and context chars >= 0")
+    instruct_batch_size = (args.instruct_batch_size if args.instruct_batch_size is not None
+                           else generation_settings["instruct_batch_size"])
+    if attribute_batch_size < 1 or attribute_context_chars < 0 or instruct_batch_size < 1:
+        raise SystemExit("attribute batch size, instruct batch size must be >= 1 and context chars >= 0")
     try:
         configured_windows = gen.get("context_rescue_windows")
         validated_windows = get_context_rescue_windows(configured_windows)
@@ -3010,6 +3024,7 @@ def main():
     print(f"Three-pass generation: {len(book)} chars, chunk_size={chunk_size}, "
           f"attribute_batch_size={attribute_batch_size}, "
           f"attribute_context_chars={attribute_context_chars}, "
+          f"instruct_batch_size={instruct_batch_size}, "
           f"attribute_prompt_variant={attribute_prompt_variant}, "
           f"model={model_name}, pass2_on_exhaustion={args.pass2_on_exhaustion}, "
           f"pass2_keep_scope={keep_scope}")
@@ -3029,6 +3044,7 @@ def main():
         "first_person_narrator": narrator,
         "attribute_batch_size": attribute_batch_size,
         "attribute_context_chars": attribute_context_chars,
+        "instruct_batch_size": instruct_batch_size,
         "attribute_prompt_variant": attribute_prompt_variant,
         "attribute_prompt_texts": attribute_prompt_texts,
         "cast": cast,

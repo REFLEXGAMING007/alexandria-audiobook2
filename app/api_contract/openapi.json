@@ -1266,6 +1266,13 @@
             "title": "Three Pass Group Rule",
             "type": "boolean"
           },
+          "three_pass_instruct_batch_size": {
+            "default": 25,
+            "maximum": 3000.0,
+            "minimum": 5.0,
+            "title": "Three Pass Instruct Batch Size",
+            "type": "integer"
+          },
           "three_pass_instruct_temperature": {
             "default": 0.1,
             "maximum": 2.0,

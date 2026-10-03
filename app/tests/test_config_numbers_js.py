@@ -10,6 +10,7 @@ SOURCE = Path(__file__).resolve().parent.parent / "static/js/app-core.js"
 FIELDS = (("top-k", "generation", "top_k", "1e1", 10),
           ("tp-chunk-size", "generation", "three_pass_chunk_size", "1e3", 1000),
           ("tp-attribute-batch-size", "generation", "three_pass_attribute_batch_size", "1e1", 10),
+          ("tp-instruct-batch-size", "generation", "three_pass_instruct_batch_size", "3e3", 3000),
           ("context-rescue-retries", "generation", "context_rescue_retries", "1e0", 1),
           ("tts-external-timeout", "tts", "external_timeout_seconds", "3e2", 300),
           ("tts-max-new-tokens", "tts", "max_new_tokens", "2.048e3", 2048),

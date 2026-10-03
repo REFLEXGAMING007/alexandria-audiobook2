@@ -67,12 +67,14 @@ class ThreePassCliSettingsTests(unittest.TestCase):
                                 'context_rescue_retries':4}}
         original = copy.deepcopy(config)
         extra = ['--attribute-batch-size','1','--attribute-context-chars','5000',
+                 '--instruct-batch-size','40',
                  '--prompt-variant','michel2_full','--attribution-votes','3',
                  '--vote-temperature','0.7','--reasoning-effort','none']
         with tempfile.TemporaryDirectory() as tmp:
             full, full_plans = self.run_cli(tmp, config, False, extra)
             samples, sample_plans = self.run_cli(tmp, config, True, extra)
         expected = {'attribute_batch_size':1, 'attribute_context_chars':5000,
+                    'instruct_batch_size':40,
                     'attribute_prompt_variant':'michel2_full', 'attribute_prompt_texts':None,
                     'attribution_votes':3, 'vote_temperature':0.7,
                     'thinking_mode':'none', 'context_windows':(100,200), 'context_rescue_retries':4}
