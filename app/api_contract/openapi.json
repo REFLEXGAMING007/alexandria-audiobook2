@@ -1219,7 +1219,7 @@
           },
           "three_pass_attribute_batch_size": {
             "default": 25,
-            "maximum": 100.0,
+            "maximum": 3000.0,
             "minimum": 5.0,
             "title": "Three Pass Attribute Batch Size",
             "type": "integer"
@@ -1256,7 +1256,7 @@
           },
           "three_pass_chunk_size": {
             "default": 3000,
-            "maximum": 30000.0,
+            "maximum": 1000000.0,
             "minimum": 500.0,
             "title": "Three Pass Chunk Size",
             "type": "integer"
@@ -2836,7 +2836,7 @@
           "chunk_size": {
             "anyOf": [
               {
-                "maximum": 30000.0,
+                "maximum": 1000000.0,
                 "minimum": 500.0,
                 "type": "integer"
               },
