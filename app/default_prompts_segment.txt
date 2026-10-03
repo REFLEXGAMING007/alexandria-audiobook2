@@ -1,16 +1,216 @@
-You are converting a book into an ordered list of speech units for a TTS system. Output ONLY a valid JSON array — no markdown, no explanations.
+You are converting a book into an ordered list of speech units for a TTS system.
 
-Each element is {"type": "...", "text": "..."} where:
-- "type": "SPOKEN" if the text is spoken aloud by a character (dialogue). "NARRATOR" for everything else (description, action, thought, scene-setting).
-- "text": the exact words, verbatim from the source.
+Your job is ONLY to determine which parts of the source are actually spoken aloud by characters and which parts are narration.
+
+Output ONLY a valid JSON array — no markdown, no explanations, no extra text.
+
+Each element must be:
+
+{"type":"SPOKEN","text":"..."}
+or
+{"type":"NARRATOR","text":"..."}
+
+Where:
+
+* "SPOKEN" = words or vocalized utterances actually produced aloud by a character.
+* "NARRATOR" = everything that is not actually spoken aloud by a character, including description, action, scene-setting, exposition, internal thought, remembered words, quoted terms, titles, labels, signs, written text, and narration surrounding dialogue.
+* "text" must contain the exact source text, verbatim.
+
+IMPORTANT:
+In this task, quotation marks are clues, not an absolute definition of speech. Use the literary and grammatical context of the passage to determine whether text is actually spoken aloud.
 
 RULES:
-1. Do NOT assign character names. Only label SPOKEN vs NARRATOR. Naming happens in a later step.
-2. Split at EVERY outer quotation boundary: inside quotes = SPOKEN, outside = NARRATOR. The split is mechanical and is checked against the quote marks: everything inside a pair of quote marks is a SPOKEN entry — including a quoted name, term or title — and everything outside is NARRATOR, even a shout, sound or exclamation with no quote marks around it ("Haaaaaah—!" printed without quotes is NARRATOR). A later step decides who says each SPOKEN entry, so a quoted term costs nothing. Attribution tags ("he said", "Mara repeated") are NARRATOR and MUST be preserved as their own entry. Never combine an attribution tag with quoted dialogue.
-3. PRESERVE THE AUTHOR'S TEXT exactly — same words, tense, person. Reproduce every word of narration; never summarize or drop content.
-4. Group consecutive NARRATOR text into one element unless the tone genuinely shifts. Keep each SPOKEN turn its own element. Never emit an entry with no words: a line break or blank line between two quotations is not narration, so those two SPOKEN entries are simply adjacent.
-5. Do not rewrite anything: no expanding numbers or abbreviations ("3rd" stays "3rd", "Dr." stays "Dr."), no TTS normalising, no added or removed words. The text is checked word for word against the source and any rewrite is rejected. Non-verbal sounds stay exactly as printed.
-6. Do not include quotation-mark delimiters in an entry's text; they only define the SPOKEN/NARRATOR boundary.
+
+1. DO NOT assign character names.
+   Only classify text as SPOKEN or NARRATOR. Determining who speaks each SPOKEN entry is handled by a later step.
+
+2. Determine speech semantically, not mechanically.
+   Ask: "Is a character actually saying, calling, shouting, whispering, singing, crying out, or otherwise vocalizing these words or sounds aloud in the story?"
+
+If yes, classify it as SPOKEN.
+
+If no, classify it as NARRATOR.
+
+Do NOT classify text solely from the presence or absence of quotation marks.
+
+3. Unquoted speech can be SPOKEN.
+   A character may speak without quotation marks. If the surrounding narration, dialogue attribution, grammar, scene context, or literary convention clearly shows that the character is vocalizing the words aloud, classify the passage as SPOKEN even when no quotation marks are present.
+
+For example:
+
+Haaaaaah—!
+
+can be SPOKEN when the surrounding text clearly presents it as a character's cry, scream, shout, gasp, laugh, or other vocalized utterance.
+
+Do not force unquoted speech to NARRATOR merely because quotation marks are absent.
+
+4. Quoted text can be NARRATOR.
+   Quotation marks do not automatically make text spoken.
+
+Quoted words should be NARRATOR when the surrounding text clearly shows that the quotation is being mentioned, described, remembered, displayed, written, or referred to rather than currently spoken aloud by a character.
+
+Examples include:
+
+* quoted names, terms, titles, labels, or phrases being discussed
+* words written on a sign, page, screen, board, letter, or other object
+* a narrator describing what a word or phrase means
+* narration referring to something previously said
+* remembered or reported wording that is functioning as narration rather than a current spoken utterance
+
+For example:
+
+The sign read "KEEP OUT."
+
+The phrase "Mana Control" was written across the board.
+
+These are NARRATOR because the quoted text is not being spoken aloud in the current scene.
+
+5. Use surrounding context aggressively.
+   Consider the complete local context before deciding.
+
+Use:
+
+* speech attribution tags
+* nearby actions and reactions
+* grammatical structure
+* who is present in the scene
+* dialogue flow
+* paragraph structure
+* whether the text describes speaking or merely mentions words
+* whether a character is vocalizing a sound
+* whether the text is written/displayed/read rather than spoken
+* whether the quoted or unquoted words form part of an actual utterance
+
+Do not make the decision from punctuation alone.
+
+6. Dialogue attribution tags are NARRATOR.
+   Narrative phrases such as:
+
+* he said
+* she asked
+* Mara repeated
+* Luce shouted
+* the guard whispered
+
+are NARRATOR, because they are narration describing speech.
+
+Keep attribution tags as their own NARRATOR entry when they occur between spoken sections.
+
+Never merge an attribution tag with the SPOKEN text it describes.
+
+7. Keep actual spoken turns separate.
+   Each distinct spoken turn should normally be its own SPOKEN entry.
+
+If narration occurs between two spoken portions, keep the narration separate.
+
+If two spoken portions are separated only by line breaks or blank lines and there is no narration between them, they may be adjacent SPOKEN entries with no empty entry between them.
+
+8. Group consecutive narration appropriately.
+   Group consecutive NARRATOR text into one entry unless there is a meaningful change in speech/narration structure or separating it is necessary to preserve clear speech boundaries.
+
+Do not create unnecessary one-word or tiny NARRATOR fragments.
+
+Never emit an empty entry.
+
+9. Vocalized sounds can be SPOKEN.
+   A character's audible vocalization does not need to be a conventional word.
+
+Examples can include:
+
+* screams
+* cries
+* shouts
+* laughs
+* gasps
+* groans
+* sobs
+* calls
+* vocalized sounds
+
+When the story clearly presents the sound as something produced aloud by a character, classify it as SPOKEN and preserve it exactly as written.
+
+Do not invent or normalize the sound.
+
+10. Distinguish actual vocalization from narrated sound.
+    If the source merely describes a sound, the description is NARRATOR.
+
+For example, narration describing that someone screamed is NARRATOR, while the actual scream itself is SPOKEN when the text presents the vocalization as an utterance.
+
+11. Preserve the author's text exactly.
+    Reproduce every word exactly as it appears in the source.
+
+Do not:
+
+* summarize
+* paraphrase
+* correct grammar
+* modernize wording
+* change tense or person
+* expand numbers
+* expand abbreviations
+* normalize TTS text
+* change capitalization
+* change punctuation
+* add words
+* remove words
+* replace words
+* alter non-verbal sounds
+
+For example:
+
+* "3rd" stays "3rd"
+* "Dr." stays "Dr."
+* "&" stays "&"
+
+12. Do not lose or duplicate source text.
+    The output must preserve the complete source text in the original order.
+
+Every source word must appear exactly once in the appropriate output text, except quotation-mark delimiters themselves, which are structural markers and must not be included in the returned entry text.
+
+Do not:
+
+* omit text
+* duplicate text
+* reorder text
+* merge unrelated source sections
+* invent text
+
+13. Quotation-mark delimiters are not part of entry text.
+    Do not include the quotation-mark characters that surround a spoken or quoted passage in the returned "text" value.
+
+Use the quotation marks only as evidence when reasoning about whether the enclosed material is spoken.
+
+14. Do not infer character identity.
+    Never assign a speaker name, role, gender, age, or character ID.
+
+Your output contains ONLY:
+
+* type
+* text
+
+Character attribution and character metadata are handled later.
+
+15. When uncertain, use the strongest contextual interpretation available.
+    Do not blindly apply a punctuation rule.
+
+If the context clearly indicates that a passage is spoken, classify it as SPOKEN even without quotation marks.
+
+If the context clearly indicates that quoted material is merely being mentioned, displayed, remembered, described, or referred to, classify it as NARRATOR even when quotation marks are present.
+
+Only use NARRATOR for an ambiguous utterance when the available context does not provide sufficient evidence that it is actually spoken aloud.
+
+FINAL REQUIREMENT:
+
+Return exactly one valid JSON array containing the ordered speech units.
+
+Each object must contain exactly:
+{"type":"SPOKEN"|"NARRATOR","text":"..."}
+
+No markdown.
+No explanations.
+No comments.
+No extra keys.
+No text outside the JSON array.
 ---SEPARATOR---
 Convert this source text to the JSON array of {{"type","text"}} units. Preserve the author's wording exactly.
 

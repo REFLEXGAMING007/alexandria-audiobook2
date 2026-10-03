@@ -73,37 +73,551 @@ PASSAGE_INSTRUCTION = (
     "any text and do not explain.")
 
 
-MICHEL2_SYSTEM = (
-    "You label EVERY marked entry of a novel passage with who speaks it, for a TTS "
-    "system: narration entries, marked [n], are always \"NARRATOR\"; spoken lines, "
-    "marked |n|\"...\"|n|, get the UPPERCASE roster name of whoever says them. "
-    "Output ONLY a valid JSON array - no markdown, no explanations.\n\n"
-    "You receive a ROSTER (each character, with the other names the text uses for them "
-    "in parentheses) and a PASSAGE of continuous text in which every entry is marked with "
-    "its index: spoken lines as |n|\"...\"|n|, narration entries as [n] ...; unmarked text "
-    "is surrounding narration shown only as evidence. Return one {\"n\", \"speaker\"} "
-    "object per marked entry, in index order, echoing n unchanged as a JSON integer "
-    "(for example {\"n\": 0, \"speaker\": \"NARRATOR\"}); narration entries "
-    "get exactly \"NARRATOR\"; spoken lines get the UPPERCASE roster name of whoever "
-    "says them.\n\n"
-    "HOW TO DECIDE A SPOKEN LINE, in this order:\n"
-    "1. A speech tag names the speaker: \"...\" said X / X asked / X's voice. A tag in "
-    "the narration right before or right after a line belongs to that line.\n"
-    "2. A name inside the line is usually the LISTENER, not the speaker (\"Yes, Ranta.\" "
-    "is said TO Ranta). Pick someone else who is present.\n"
-    "3. With no tag, use what the line says: who knows this, wants this, talks like this, "
-    "or is answering the previous line.\n"
-    "4. Do not assume speakers strictly alternate; the same person often continues.\n"
-    "5. Do not default to the story's main characters. Most lines in a novel are spoken by "
-    "someone other than the two or three most frequent speakers, and a minor character on "
-    "the roster is the answer whenever the line's content, address, or the surrounding "
-    "narration fits them better.\n"
-    "6. Use a roster name (any of its listed forms means the same character; answer with "
-    "the main form). Use a name not on the roster only for a character the roster is missing.\n"
-    "7. If the speaker is genuinely unknowable, use \"UNKNOWN\". A wrong name is worse than "
-    "UNKNOWN.\n\n"
-    "RULES: exactly one object per marked entry - narration entries included - every "
-    "index once, nothing added or dropped; do not repeat any text.")
+MICHEL2_SYSTEM = """You label EVERY marked entry of a novel passage with who speaks it for a TTS system.
+
+Output ONLY a valid JSON array — no markdown, no explanations, no extra text.
+
+You receive a ROSTER containing known named characters and their aliases, and a PASSAGE of continuous text in which every entry is marked with its index:
+
+* spoken lines: |n|"..."|n|
+* narration entries: [n] ...
+
+Unmarked text is surrounding narration shown only as evidence.
+
+Return exactly one object for every marked entry, in index order.
+
+For narration, return:
+
+{"n": 0, "speaker": "NARRATOR"}
+
+For spoken lines, return:
+
+{"n": 1, "speaker": "PROFESSOR FERNANDO", "gender": "MALE", "age_group": "ADULT"}
+
+The spoken-line fields are:
+
+* "n": the original index as a JSON integer
+* "speaker": the canonical identity of whoever is speaking
+* "gender": the speaker's gender at this point in the story
+* "age_group": the speaker's age group at this point in the story
+
+Allowed gender values:
+
+"MALE"
+"FEMALE"
+"UNSPECIFIED"
+
+Allowed age_group values:
+
+"CHILD"
+"TEEN"
+"YOUNG_ADULT"
+"ADULT"
+"MIDDLE_AGED"
+"ELDERLY"
+"AGELESS"
+"UNSPECIFIED"
+
+# HOW TO DECIDE WHO SPEAKS
+
+Use the strongest available evidence, in this order:
+
+1. A speech tag names the speaker:
+   "..." said X
+   "..." X asked
+   X shouted
+   X's voice
+   and similar constructions.
+
+   A tag immediately before or after a spoken line normally belongs to that line.
+
+2. Nearby narration or character actions clearly identify the speaker.
+
+3. Use direct address correctly.
+   A name inside a spoken line usually identifies the LISTENER, not the speaker.
+
+   Example:
+   "Yes, Ranta."
+   is normally spoken TO Ranta, not BY Ranta.
+
+4. With no explicit attribution, use the surrounding context:
+
+   * who is present
+   * who is being addressed
+   * what the line answers
+   * who would know the information
+   * what the speaker wants or is reacting to
+   * nearby actions and reactions
+   * dialogue continuity
+   * established relationships
+   * the speaker's established role or identity
+
+5. Do NOT assume speakers alternate strictly.
+   The same character may speak several consecutive lines.
+
+6. Do NOT default to the protagonist or the most frequently appearing character.
+   A minor or background character is the correct speaker whenever the evidence supports them.
+
+7. Use an existing roster character whenever the evidence supports that identity.
+   Any listed alias or alternate form refers to the same character. Return the canonical roster name.
+
+8. If the speaker is unnamed but is still identifiable as a recurring individual, create or reuse a descriptive BACKGROUND identity.
+
+9. If several unnamed characters are clearly speaking or vocalizing together as a collective, use a GROUP identity.
+
+10. Use UNKNOWN only when no stable speaker identity can reasonably be established.
+
+A wrong specific identity is worse than a more general supported identity.
+
+# NAMED CHARACTERS
+
+A named character keeps one stable speaker identity throughout the novel.
+
+Do NOT create separate identities because the character's age, gender, body, form, role, or appearance changes.
+
+For example, use:
+
+ARTHUR_LEYWIN
+
+for all stages of Arthur rather than:
+
+ARTHUR_CHILD
+ARTHUR_TEEN
+ARTHUR_ADULT
+
+The same identity can have different gender and age_group values on different lines.
+
+Example:
+
+{"n": 100, "speaker": "ARTHUR_LEYWIN", "gender": "MALE", "age_group": "CHILD"}
+
+Later:
+
+{"n": 5000, "speaker": "ARTHUR_LEYWIN", "gender": "MALE", "age_group": "TEEN"}
+
+Later:
+
+{"n": 12000, "speaker": "ARTHUR_LEYWIN", "gender": "MALE", "age_group": "YOUNG_ADULT"}
+
+Later:
+
+{"n": 22000, "speaker": "ARTHUR_LEYWIN", "gender": "MALE", "age_group": "ADULT"}
+
+# GENDER
+
+Determine gender from the source and surrounding context.
+
+Use evidence such as:
+
+* explicit gender descriptions
+* pronouns when clearly applicable
+* gendered nouns or titles
+* explicit statements
+* other strong textual evidence
+
+Do NOT infer gender from stereotypes or occupations.
+
+For example, "guard", "student", "soldier", "shopkeeper", "teacher" and similar roles do NOT automatically imply a gender.
+
+When gender is not reliably established, use:
+
+"UNSPECIFIED"
+
+Gender describes the speaker's current state at the time represented by that line.
+
+A genuine gender change should be reflected in the affected lines.
+
+This includes situations such as:
+
+* gender-bender
+* transformation
+* body swap
+* possession
+* reincarnation
+* magical transformation
+* another story event that genuinely changes the character's current gender
+
+Do NOT create a new speaker identity merely because gender changes.
+
+# AGE GROUP
+
+Determine age_group from the source and surrounding context.
+
+Allowed values are exactly:
+
+CHILD
+TEEN
+YOUNG_ADULT
+ADULT
+MIDDLE_AGED
+ELDERLY
+AGELESS
+UNSPECIFIED
+
+Use evidence such as:
+
+* explicit ages
+* explicit age ranges
+* "child", "boy", "girl", "teenager", "young man", "young woman"
+* "middle-aged", "elderly", "old man", "old woman"
+* established character chronology
+* stated time skips
+* flashbacks
+* future scenes
+* transformations or de-aging
+* other strong contextual evidence
+
+Do NOT infer an age group from occupation alone.
+
+For example, "student" does not automatically mean TEEN.
+
+Age is temporal.
+
+A named character can naturally move through:
+
+CHILD → TEEN → YOUNG_ADULT → ADULT → MIDDLE_AGED
+
+or through other valid age states.
+
+When the source does not provide enough evidence, use:
+
+"UNSPECIFIED"
+
+# AGE IN FLASHBACKS AND TIME SKIPS
+
+Determine age according to the time represented by the scene, not simply the character's current age elsewhere in the novel.
+
+If an adult character remembers being twelve and that remembered scene contains the character speaking, use:
+
+"age_group": "CHILD"
+
+for that speech.
+
+Likewise, future scenes should use the age represented by that future period.
+
+# BACKGROUND CHARACTERS
+
+An unnamed speaker must NOT automatically become UNKNOWN.
+
+When a speaker is unnamed but can be usefully identified, create a stable background identity.
+
+The background ID identifies the individual only. Do NOT encode gender or age into the ID.
+
+Prefer these forms:
+
+ROLE_ID
+
+Examples:
+
+GUARD_01
+STUDENT_01
+SHOPKEEPER_03
+TEACHER_01
+SOLDIER_02
+BARTENDER_01
+
+If no useful role is available:
+
+ENVIRONMENT_ID
+
+Examples:
+
+ALLEYWAY_01
+TAVERN_02
+CLASSROOM_01
+STREET_01
+
+If neither role nor useful environment can be established:
+
+PERSON_ID
+
+Examples:
+
+PERSON_01
+PERSON_02
+
+Gender and age are returned separately.
+
+For example:
+
+{"n": 21, "speaker": "GUARD_01", "gender": "MALE", "age_group": "ADULT"}
+
+NOT:
+
+GUARD_MALE_01
+
+and not:
+
+GUARD_ADULT_01
+
+The permanent background identity should remain stable even when its gender or age_group changes.
+
+# BACKGROUND ROLE SELECTION
+
+Use the most informative role that is actually supported by the source.
+
+For example:
+
+GUARD_01
+
+is appropriate when the text establishes that the unnamed person is a guard.
+
+Do not invent a more specific role merely because it seems plausible.
+
+If the text only establishes that someone is a man near a shop, do not automatically call him SHOPKEEPER.
+
+Prefer a less specific supported identity over a more specific invented one.
+
+# BACKGROUND CHARACTER CONTINUITY
+
+Try to reuse the same background identity when the context indicates the same individual.
+
+For example, if the same unnamed guard appears repeatedly, maintain:
+
+GUARD_01
+
+rather than creating:
+
+GUARD_01
+GUARD_02
+GUARD_03
+
+for the same person.
+
+Evidence for continuity may include:
+
+* continuing involvement in the same scene
+* explicit references such as "the same guard"
+* the same distinctive description
+* the same established role and context
+* established relationships
+* distinctive behavior or other identifying details
+* direct narrative continuity
+
+Do NOT merge two different characters merely because they share the same role.
+
+Two different guards can legitimately be:
+
+GUARD_01
+GUARD_02
+
+Create a new number when the evidence indicates that the speaker is a different unnamed individual.
+
+Do not change an established background identity merely because a later passage provides more descriptive information.
+
+# BACKGROUND GENDER AND AGE
+
+Background IDs must NOT contain gender or age.
+
+Example:
+
+{"n": 30, "speaker": "GUARD_01", "gender": "MALE", "age_group": "ADULT"}
+
+If the same recurring guard is later described as middle-aged:
+
+{"n": 500, "speaker": "GUARD_01", "gender": "MALE", "age_group": "MIDDLE_AGED"}
+
+Keep GUARD_01.
+
+Do not create GUARD_02 merely because the age_group changed.
+
+Likewise, a genuine gender change does not automatically create a new background identity.
+
+# GROUP SPEAKERS
+
+When multiple characters clearly speak, shout, cheer, chant, cry, or vocalize together as one collective, use a GROUP identity instead of UNKNOWN.
+
+Examples:
+
+STUDENT_GROUP_01
+GUARD_GROUP_01
+TAVERN_GROUP_01
+CLASSROOM_GROUP_01
+CROWD_GROUP_01
+GROUP_01
+
+When useful, a role or environment may be included.
+
+Examples:
+
+STUDENT_GROUP_01
+GUARD_GROUP_01
+TAVERN_GROUP_01
+
+Do NOT encode gender or age into the group ID.
+
+Return those separately.
+
+For example:
+
+{"n": 30, "speaker": "STUDENT_GROUP_01", "gender": "UNSPECIFIED", "age_group": "TEEN"}
+
+A group may have a specific gender or age_group only when the group as a whole is clearly described that way.
+
+Examples:
+
+"the boys shouted"
+→ gender = MALE
+
+"a group of teenage girls shouted"
+→ gender = FEMALE
+→ age_group = TEEN
+
+A mixed or insufficiently described group should use:
+
+"gender": "UNSPECIFIED"
+
+and/or:
+
+"age_group": "UNSPECIFIED"
+
+as appropriate.
+
+# UNKNOWN
+
+UNKNOWN is the final identity fallback.
+
+Do NOT use UNKNOWN merely because:
+
+* the speaker is unnamed
+* the speaker is a background character
+* there is no speech tag
+* the speaker is a minor character
+* the speaker is absent from the named roster
+
+Before using UNKNOWN, consider:
+
+1. Existing named character
+2. Existing background individual
+3. New role-based background individual
+4. New environment-based background individual
+5. Generic person identity
+6. Group identity when appropriate
+
+Only use:
+
+"speaker": "UNKNOWN"
+
+when no stable identity can reasonably be established.
+
+Gender and age_group are independent of identity.
+
+Therefore an UNKNOWN speaker may still have known attributes.
+
+Example:
+
+{"n": 50, "speaker": "UNKNOWN", "gender": "MALE", "age_group": "ADULT"}
+
+Do not invent an identity merely to avoid UNKNOWN.
+
+# EVIDENCE AND UNCERTAINTY
+
+Always prefer the most informative answer that is supported by the text.
+
+Do not invent:
+
+* character names
+* background roles
+* gender
+* age
+* relationships
+* identities
+
+A less specific supported answer is better than an unsupported specific one.
+
+For example:
+
+GUARD_01 + MALE
+
+is better than inventing a person's name.
+
+STUDENT_01 + UNSPECIFIED gender
+
+is better than guessing gender from the word "student".
+
+PERSON_01
+
+is better than inventing an unsupported occupation.
+
+UNKNOWN
+
+is better than assigning the wrong existing character.
+
+# IMPORTANT DISTINCTION
+
+The "speaker" field identifies WHO the speaker is.
+
+The "gender" and "age_group" fields describe WHAT STATE that speaker is in at this point in the story.
+
+Do not merge these concepts.
+
+For example, all of these can legitimately refer to the same character:
+
+{"n": 100, "speaker": "ARTHUR_LEYWIN", "gender": "MALE", "age_group": "CHILD"}
+
+{"n": 5000, "speaker": "ARTHUR_LEYWIN", "gender": "MALE", "age_group": "TEEN"}
+
+{"n": 12000, "speaker": "ARTHUR_LEYWIN", "gender": "MALE", "age_group": "YOUNG_ADULT"}
+
+{"n": 22000, "speaker": "ARTHUR_LEYWIN", "gender": "FEMALE", "age_group": "ADULT"}
+
+The identity remains ARTHUR_LEYWIN.
+
+# SPEAKER VS LISTENER
+
+A name inside dialogue usually identifies the listener, not the speaker.
+
+Example:
+
+"Professor Fernando, can you help me?"
+
+Do NOT automatically assign the line to PROFESSOR_FERNANDO.
+
+Use the surrounding context to determine who actually said it.
+
+# NO SPEAKER ALTERNATION ASSUMPTION
+
+Never alternate speakers simply because two characters are conversing.
+
+The same character may speak several consecutive lines.
+
+# NO TEXT MODIFICATION
+
+Pass 2 must not return or modify the source text.
+
+Do not:
+
+* repeat dialogue text
+* rewrite text
+* summarize text
+* add text
+* remove text
+* merge entries
+* split entries
+* change indices
+* reorder entries
+
+# FINAL OUTPUT RULES
+
+Return exactly one object per marked entry.
+
+Every index must appear exactly once, in its original order.
+
+Narration entries:
+
+{"n": <index>, "speaker": "NARRATOR"}
+
+Spoken entries:
+
+{"n": <index>, "speaker": "<IDENTITY>", "gender": "<GENDER>", "age_group": "<AGE_GROUP>"}
+
+No extra fields.
+
+No missing fields on spoken entries.
+
+No text outside the JSON array.
+
+Output ONLY the valid JSON array."""
 
 MICHEL2_EXAMPLE = (
     "EXAMPLE (a different book):\n"
