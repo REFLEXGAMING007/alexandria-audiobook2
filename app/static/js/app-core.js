@@ -2571,6 +2571,12 @@
             const voiceType = voiceCfg.type || 'custom';
             const stateSelector = (charType === 'NARRATOR' || voice.assignable === false)
                 ? '' : renderStateSelector(voice);
+            // Opens the Voice Library scoped to this character (and, when a state
+            // is active, to that state) so a chosen voice lands in the right place.
+            const libraryButton = voice.assignable === false ? ''
+                : `<button class="btn btn-sm btn-outline-primary mt-1" type="button"
+                       onclick="openVoiceLibrary('${escapeHtml(voice.name)}', '${escapeHtml(stateKey)}')"
+                       title="Browse voices in the Voice Library">${charType === 'NARRATOR' ? '' : '<i class="fas fa-book me-1"></i>'}Voice Library</button>`;
             const typeBadge = charType === 'NARRATOR' ? ''
                 : `<span class="badge bg-${charType === 'NAMED' ? 'primary' : charType === 'UNKNOWN' ? 'warning' : charType === 'GROUP' ? 'info' : 'secondary'} me-1">${escapeHtml(charType)}</span>`;
 
@@ -2582,6 +2588,7 @@
                             <div class="col-md-3">
                                 <h5 class="card-title">${typeBadge}${escapeHtml(displayName)}${voice.name !== displayName ? ` <small class="text-muted">(${escapeHtml(voice.name)})</small>` : ''} ${config.alias_of ? `<span class="badge bg-info ms-2" title="Alias of ${escapeHtml(config.alias_of)}">${escapeHtml(config.alias_of)}</span>` : ''}${(window._lineCounts && window._lineCounts[voice.name] != null) ? `<span class="badge bg-secondary ms-2" title="${window._lineCounts[voice.name]} lines in this book">${window._lineCounts[voice.name]} lines</span>` : ''}</h5>
                                 ${stateSelector}
+                                ${libraryButton}
                                 <button class="btn btn-sm btn-outline-primary mt-1" type="button" onclick="regeneratePersona(this)"><i class="fas fa-rotate me-1"></i>Regenerate persona</button>
                                 <button class="btn btn-sm btn-outline-primary mt-1" type="button" onclick="generateAgeVersion(this)"><i class="fas fa-person-circle-plus me-1"></i>Generate age version</button>
                                 <div class="small text-muted">Persona: ${escapeHtml(config.persona_status || 'unreviewed')} · Voice: ${escapeHtml(config.voice_status || 'unassigned')}</div>
@@ -2989,6 +2996,347 @@
             window._voiceFilters = { age: '', gender: '', characterType: '', assignment: '', stateCount: '' };
             // Manual state selection is restored: nothing forces a state now.
             updateVoiceCardVisibility();
+        }
+
+        // --- Voice Library v1 ------------------------------------------------------
+        // Voice discovery + audition. It reads the voices the app already has
+        // (custom presets, LoRA adapters, clone imports, designed voices) and
+        // never stores voice configuration of its own: picking a voice writes
+        // through the same character/state editor and save path as the Voices tab.
+        window._voiceLibrary = { catalog: [], loaded: false };
+        // {speaker, stateKey, displayName, ageLabel, gender} while opened from a card.
+        window._libraryContext = null;
+
+        // "Silky warm baritone, brisk and grounded" -> ["Silky warm baritone", "brisk..."]
+        function voiceTagsFrom(text) {
+            return String(text || '')
+                .split(/[,;–—]|\s-\s/)
+                .map(t => t.trim())
+                .filter(t => t && t.length > 1)
+                .slice(0, 4);
+        }
+
+        function buildVoiceLibraryCatalog() {
+            const items = [];
+            const seen = new Set();
+
+            // LoRA adapters (built-in + user-trained) carry real metadata.
+            (window._loraModelsCache || []).forEach(m => {
+                if (!m || !m.id) { return; }
+                // Same defaults /api/lora/models uses, so the library agrees with
+                // the Voices card about what is built in, downloaded, previewable.
+                const isBuiltin = m.builtin === true;
+                const isDownloaded = m.downloaded !== false;
+                items.push({
+                    key: `lora:${m.id}`,
+                    favId: m.id,                       // existing favorites store
+                    name: m.name || m.id,
+                    type: isBuiltin ? 'builtin_lora' : 'lora',
+                    typeLabel: isBuiltin ? 'LoRA' : 'Trained LoRA',
+                    gender: m.inferred_gender || 'unspecified',
+                    age: m.inferred_age || 'unspecified',
+                    tags: voiceTagsFrom(m.description),
+                    description: m.description || '',
+                    favorite: !!m.favorite,
+                    previewUrl: m.preview_audio_url || null,
+                    previewEndpoint: `/api/lora/preview/${encodeURIComponent(m.id)}`,
+                    available: isDownloaded,
+                });
+                seen.add(m.id);
+            });
+
+            (window._cloneVoicesCache || []).forEach(v => {
+                if (!v || !v.id) { return; }
+                items.push({
+                    key: `clone:${v.id}`, favId: `lib:clone:${v.id}`,
+                    name: v.name || v.id, type: 'clone', typeLabel: 'Clone',
+                    gender: 'unspecified', age: 'unspecified',
+                    tags: voiceTagsFrom(v.description),
+                    description: v.description || '',
+                    favorite: false, previewUrl: null, previewEndpoint: null, available: true,
+                });
+            });
+
+            (window._designedVoicesCache || []).forEach(v => {
+                if (!v || !v.id) { return; }
+                items.push({
+                    key: `design:${v.id}`, favId: `lib:design:${v.id}`,
+                    name: v.name || v.id, type: 'design', typeLabel: 'Design',
+                    gender: 'unspecified', age: 'unspecified',
+                    tags: voiceTagsFrom(v.description),
+                    description: v.description || '',
+                    favorite: false, previewUrl: null, previewEndpoint: null, available: true,
+                });
+            });
+
+            // The Qwen preset voices the Voices tab already offers.
+            (typeof AVAILABLE_VOICES !== 'undefined' ? AVAILABLE_VOICES : []).forEach(name => {
+                if (seen.has(name)) { return; }
+                items.push({
+                    key: `custom:${name}`, favId: `lib:custom:${name}`,
+                    name, type: 'custom', typeLabel: 'Custom',
+                    gender: 'unspecified', age: 'unspecified',
+                    tags: [], description: 'Built-in preset voice',
+                    favorite: false, previewUrl: null, previewEndpoint: null, available: true,
+                });
+            });
+
+            return items;
+        }
+
+        async function loadVoiceLibrary() {
+            window._voiceLibrary.loaded = true;
+            try {
+                window._loraModelsCache = await API.get('/api/lora/models');
+            } catch (e) { console.debug('voice library: lora list failed', e); }
+            try {
+                window._cloneVoicesCache = await API.get('/api/clone_voices/list');
+            } catch (e) { console.debug('voice library: clone list failed', e); }
+            try {
+                window._designedVoicesCache = await API.get('/api/voice_design/list');
+            } catch (e) { console.debug('voice library: designed list failed', e); }
+            window._voiceLibrary.catalog = buildVoiceLibraryCatalog();
+            renderVoiceLibrary();
+        }
+
+        function readVoiceLibraryFilters() {
+            return {
+                search: (document.getElementById('vl-search')?.value || '').trim().toLowerCase(),
+                gender: document.getElementById('vl-gender')?.value || '',
+                age: document.getElementById('vl-age')?.value || '',
+                type: document.getElementById('vl-type')?.value || '',
+                favorites: document.getElementById('vl-favorites')?.value || '',
+            };
+        }
+
+        function voiceLibraryMatches(voice, f) {
+            if (f.gender && (voice.gender || 'unspecified') !== f.gender) { return false; }
+            if (f.age && (voice.age || 'unspecified') !== f.age) { return false; }
+            if (f.type && voice.type !== f.type) { return false; }
+            if (f.favorites === 'yes' && !voice.favorite) { return false; }
+            if (f.favorites === 'no' && voice.favorite) { return false; }
+            if (f.search) {
+                const hay = `${voice.name} ${voice.description} ${(voice.tags || []).join(' ')}`.toLowerCase();
+                if (!hay.includes(f.search)) { return false; }
+            }
+            return true;
+        }
+
+        function renderVoiceLibrary() {
+            const grid = document.getElementById('voice-library-grid');
+            if (!grid) { return; }
+            const all = window._voiceLibrary.catalog || [];
+            const f = readVoiceLibraryFilters();
+            const shown = all.filter(v => voiceLibraryMatches(v, f));
+
+            const count = document.getElementById('voice-library-count');
+            if (count) {
+                count.textContent = all.length ? `${shown.length} of ${all.length} voices` : '';
+            }
+            const ctx = window._libraryContext;
+            const ctxEl = document.getElementById('voice-library-context');
+            if (ctxEl) {
+                ctxEl.style.display = ctx ? '' : 'none';
+                if (ctx) {
+                    ctxEl.innerHTML = `<i class="fas fa-user-check me-1"></i>Selecting a voice for: `
+                        + `<strong>${escapeHtml(ctx.displayName || ctx.speaker)}</strong>`
+                        + (ctx.stateKey ? ` &middot; ${escapeHtml(ctx.ageLabel || ctx.stateKey)}`
+                                        + (ctx.gender ? ` &middot; ${escapeHtml(ctx.gender)}` : '')
+                                        : ' (character voice)');
+                }
+            }
+
+            if (!all.length) {
+                grid.innerHTML = '<div class="col-12"><p class="text-muted mb-2">No voices available yet.</p>'
+                    + '<button class="btn btn-sm btn-outline-primary" type="button" onclick="document.getElementById(\'vl-upload-input\').click()">+ Add / Upload Voice</button></div>';
+                return;
+            }
+            if (!shown.length) {
+                grid.innerHTML = '<div class="col-12"><p class="text-muted mb-2">No voices match the current search and filters.</p>'
+                    + '<button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearVoiceLibraryFilters()">Clear Filters</button></div>';
+                return;
+            }
+
+            grid.innerHTML = shown.map(v => `
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card h-100" data-vl-key="${escapeHtml(v.key)}">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <strong>${escapeHtml(v.name)}</strong>
+                                <button class="btn btn-sm py-0 ${v.favorite ? 'btn-warning' : 'btn-outline-warning'}"
+                                        type="button" onclick="toggleLibraryVoiceFavorite('${escapeHtml(v.key)}')"
+                                        title="${v.favorite ? 'Remove from favorites' : 'Add to favorites'}">${v.favorite ? '★' : '☆'}</button>
+                            </div>
+                            <div class="small text-muted">${escapeHtml(v.gender === 'unspecified' ? 'Unspecified' : v.gender)} &middot; ${escapeHtml(v.age === 'unspecified' ? 'Unspecified' : String(v.age).replace(/_/g, ' '))}</div>
+                            ${v.tags.length ? `<div class="small text-muted">${v.tags.map(t => `<span class="badge bg-light text-dark border me-1">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+                            <div class="d-flex align-items-center gap-1 mt-2">
+                                <span class="badge bg-secondary">${escapeHtml(v.typeLabel)}</span>
+                                ${v.available ? '' : '<span class="badge bg-warning text-dark">Not downloaded</span>'}
+                                <span class="ms-auto"></span>
+                                <button class="btn btn-sm btn-outline-primary py-0" type="button"
+                                        onclick="previewLibraryVoice('${escapeHtml(v.key)}', this)"
+                                        title="${v.previewUrl || v.previewEndpoint ? 'Play a sample' : 'No preview available'}">&#9654; Preview</button>
+                                <button class="btn btn-sm btn-outline-success py-0" type="button"
+                                        onclick="selectLibraryVoice('${escapeHtml(v.key)}')">Select</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`).join('');
+        }
+
+        function onVoiceLibraryFilterChange() { renderVoiceLibrary(); }
+
+        function clearVoiceLibraryFilters() {
+            ['vl-search', 'vl-gender', 'vl-age', 'vl-type', 'vl-favorites']
+                .forEach(id => { const el = document.getElementById(id); if (el) { el.value = ''; } });
+            renderVoiceLibrary();
+        }
+
+        window.openVoiceLibrary = async function openVoiceLibrary(speaker, stateKey) {
+            const voice = (window._voicesByName || {})[speaker];
+            if (voice) {
+                const state = stateKey ? characterStates(voice).find(s => characterStateKey(s) === stateKey) : null;
+                window._libraryContext = {
+                    speaker,
+                    stateKey: stateKey || '',
+                    displayName: voice.display_name || speaker,
+                    ageLabel: state ? stateAgeLabel(state.age_group) : '',
+                    gender: state ? state.gender : '',
+                };
+            } else {
+                window._libraryContext = null;
+            }
+            if (!window._voiceLibrary.loaded) { await loadVoiceLibrary(); } else { renderVoiceLibrary(); }
+            const card = document.getElementById('voice-library-card');
+            if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        };
+
+        window.closeVoiceLibraryContext = function closeVoiceLibraryContext() {
+            window._libraryContext = null;
+            renderVoiceLibrary();
+        };
+
+        window.toggleLibraryVoiceFavorite = async function toggleLibraryVoiceFavorite(key) {
+            const voice = (window._voiceLibrary.catalog || []).find(v => v.key === key);
+            if (!voice) { return; }
+            try {
+                // Same store the app already uses (voice_library.json "favorites").
+                const res = await API.post(`/api/voice_library/favorites/${encodeURIComponent(voice.favId)}`);
+                const favorites = new Set(res.favorites || []);
+                window._voiceLibrary.catalog.forEach(v => {
+                    v.favorite = favorites.has(v.favId);
+                });
+                if (window._loraModelsCache) {
+                    window._loraModelsCache.forEach(m => { if (m && m.id) { m.favorite = favorites.has(m.id); } });
+                }
+                renderVoiceLibrary();
+            } catch (e) {
+                showToast('Could not update favorite: ' + e.message, 'error');
+            }
+        };
+
+        window.previewLibraryVoice = async function previewLibraryVoice(key, btn) {
+            const voice = (window._voiceLibrary.catalog || []).find(v => v.key === key);
+            if (!voice) { return; }
+            const audio = document.getElementById('voice-library-audio');
+            if (!audio) { return; }
+            const original = btn ? btn.innerHTML : '';
+            let url = voice.previewUrl;
+            if (!url && voice.previewEndpoint) {
+                if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+                try {
+                    const res = await API.post(voice.previewEndpoint, {});
+                    url = res && res.audio_url;
+                } catch (e) {
+                    if (btn) { btn.disabled = false; btn.innerHTML = original; }
+                    showToast('Preview unavailable for ' + voice.name, 'error');
+                    return;
+                }
+            }
+            if (btn) { btn.disabled = false; btn.innerHTML = original; }
+            if (!url) {
+                showToast('No preview available for ' + voice.name + ' yet.', 'warning');
+                return;
+            }
+            audio.src = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+            audio.play().catch(() => showToast('Could not play the preview.', 'error'));
+        };
+
+        window.selectLibraryVoice = async function selectLibraryVoice(key) {
+            const voice = (window._voiceLibrary.catalog || []).find(v => v.key === key);
+            if (!voice) { return; }
+            const ctx = window._libraryContext;
+            // No character context: nothing to assign to, so just surface the pick.
+            if (!ctx || !ctx.speaker) {
+                showToast(`${voice.name} selected. Open it from a character to assign.`, 'info');
+                return;
+            }
+            if (voice.type === 'clone') {
+                showToast('Clone voices cannot be assigned from the library yet - use the Clone section on the card.', 'warning');
+                return;
+            }
+            const applied = applyLibraryVoiceToCard(ctx, voice);
+            if (!applied) {
+                showToast('Could not apply ' + voice.name + ' to this character.', 'error');
+                return;
+            }
+            showToast(`${voice.name} set for ${ctx.displayName}${ctx.stateKey ? ' · ' + (ctx.ageLabel || ctx.stateKey) : ''}.`, 'success');
+        };
+
+        // Writes the chosen voice into the existing character/state editor, then
+        // lets the normal debounced save persist it (which stores it as that
+        // state's version - never the character's root config or active_version).
+        function applyLibraryVoiceToCard(ctx, voice) {
+            const speaker = ctx.speaker;
+            if (ctx.stateKey) { window._selectedStateBySpeaker[speaker] = ctx.stateKey; }
+            const card = document.querySelector(`.voice-card[data-voice="${CSS.escape(speaker)}"]`);
+            if (!card) { return false; }
+            // Re-render so the editor shows the target state first.
+            const data = (window._voicesByName || {})[speaker];
+            if (!data) { return false; }
+            const idx = Number(card.dataset.voiceIndex || 0);
+            const holder = document.createElement('div');
+            holder.innerHTML = createVoiceCard(data, idx);
+            const fresh = holder.firstElementChild;
+            card.replaceWith(fresh);
+
+            const setRadio = (type) => {
+                const radio = fresh.querySelector(`.voice-type[value="${type}"]`);
+                if (!radio) { return null; }
+                radio.checked = true;
+                if (typeof window.toggleVoiceType === 'function') { window.toggleVoiceType(radio); }
+                return radio;
+            };
+            const fire = (el) => {
+                if (!el) { return; }
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+
+            if (voice.type === 'custom') {
+                setRadio('custom');
+                const sel = fresh.querySelector('.voice-select');
+                if (!sel || ![...sel.options].some(o => o.value === voice.name)) { return false; }
+                sel.value = voice.name;
+                fire(sel);
+            } else if (voice.type === 'builtin_lora' || voice.type === 'lora') {
+                const want = voice.type === 'builtin_lora' ? 'builtin_lora' : 'lora';
+                setRadio(want);
+                const sel = fresh.querySelector(want === 'builtin_lora' ? '.builtin-lora-select' : '.lora-adapter-select');
+                const adapterId = String(voice.key).split(':')[1];
+                if (!sel || ![...sel.options].some(o => o.value === adapterId)) { return false; }
+                sel.value = adapterId;
+                fire(sel);
+            } else if (voice.type === 'design') {
+                setRadio('design');
+                const box = fresh.querySelector('.design-description');
+                if (!box) { return false; }
+                box.value = voice.description || voice.name;
+                fire(box);
+            } else {
+                return false;
+            }
+            if (typeof saveVoicesDebounced === 'function') { saveVoicesDebounced(); }
+            return true;
         }
 
         // A state is edited as an ordinary saved version, addressed by

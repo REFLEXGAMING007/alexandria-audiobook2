@@ -46,6 +46,11 @@ from hf_utils import (
 )
 from lora_evidence import get_evidence_error
 from train_lora import DEFAULT_LEARNING_RATE
+# Reuse the gender/age inference voices.py already applies when suggesting
+# LoRA voices, so the Voice Library browse filters agree with the rest of the
+# app. routers.voices does not import this module, and app.py mounts voices
+# before lora, so this direction is safe.
+from routers.voices import _infer_lora_age, _infer_lora_gender
 from utils import atomic_json_write, file_lock, get_unique_id, is_path_inside, secure_filename
 from runtime_info import get_runtime_info
 import evaluation_reviews
@@ -732,6 +737,12 @@ async def lora_list_models():
     favorites = set(_load_voice_library().get("favorites") or [])
     for m in models:
         m["favorite"] = m.get("id") in favorites
+        # Voice Library browse/filter metadata. These are NEW fields: the raw
+        # manifest `gender`/`age_group` are left exactly as authored so nothing
+        # that groups by them (e.g. the built-in LoRA dropdown) changes shape.
+        # Reuses the inference helpers voices.py already uses for suggestions.
+        m["inferred_gender"] = _infer_lora_gender(m)
+        m["inferred_age"] = _infer_lora_age(m)
         is_builtin = m.get("builtin", False)
         is_downloaded = m.get("downloaded", True)  # user-trained are always downloaded
 

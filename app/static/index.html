@@ -1698,6 +1698,70 @@
                 </div>
             </div>
 
+            <!-- Voice Library: browse, audition and pick voices. Opens scoped to a
+                 character/state when launched from a Voices card. -->
+            <div class="card mb-3" id="voice-library-card">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="m-0"><i class="fas fa-book me-2"></i>Voice Library</h5>
+                    <span id="voice-library-count" class="text-muted small"></span>
+                </div>
+                <div class="card-body">
+                    <div class="small text-muted mb-2" id="voice-library-context" style="display:none;"></div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <div class="input-group input-group-sm" style="width: 260px;">
+                            <span class="input-group-text">Search</span>
+                            <input class="form-control" id="vl-search" type="search" placeholder="Voice name or description" oninput="onVoiceLibraryFilterChange()" autocomplete="off">
+                        </div>
+                        <div class="input-group input-group-sm" style="width: 165px;">
+                            <span class="input-group-text">Gender</span>
+                            <select class="form-select" id="vl-gender" onchange="onVoiceLibraryFilterChange()">
+                                <option value="">Any</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="unspecified">Unspecified</option>
+                            </select>
+                        </div>
+                        <div class="input-group input-group-sm" style="width: 175px;">
+                            <span class="input-group-text">Age</span>
+                            <select class="form-select" id="vl-age" onchange="onVoiceLibraryFilterChange()">
+                                <option value="">Any</option>
+                                <option value="child">Child</option>
+                                <option value="teen">Teen</option>
+                                <option value="young_adult">Young Adult</option>
+                                <option value="adult">Adult</option>
+                                <option value="middle_aged">Middle Aged</option>
+                                <option value="elderly">Elderly</option>
+                                <option value="ageless">Ageless</option>
+                                <option value="unspecified">Unspecified</option>
+                            </select>
+                        </div>
+                        <div class="input-group input-group-sm" style="width: 160px;">
+                            <span class="input-group-text">Type</span>
+                            <select class="form-select" id="vl-type" onchange="onVoiceLibraryFilterChange()">
+                                <option value="">Any</option>
+                                <option value="custom">Custom</option>
+                                <option value="builtin_lora">LoRA</option>
+                                <option value="lora">Trained LoRA</option>
+                                <option value="clone">Clone</option>
+                                <option value="design">Design</option>
+                            </select>
+                        </div>
+                        <div class="input-group input-group-sm" style="width: 170px;">
+                            <span class="input-group-text">Favorites</span>
+                            <select class="form-select" id="vl-favorites" onchange="onVoiceLibraryFilterChange()">
+                                <option value="">Any</option>
+                                <option value="yes">Favorites</option>
+                                <option value="no">Not Favorites</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearVoiceLibraryFilters()">Clear Filters</button>
+                        <button class="btn btn-sm btn-outline-primary ms-auto" type="button" onclick="document.getElementById('vl-upload-input').click()"><i class="fas fa-plus me-1"></i>Add / Upload Voice</button>
+                        <input type="file" id="vl-upload-input" accept=".wav,.mp3,.flac,.ogg" style="display:none" onchange="handleCloneVoiceUpload(this)">
+                    </div>
+                    <div id="voice-library-grid" class="row g-2"></div>
+                </div>
+                <audio id="voice-library-audio" style="display:none"></audio>
+            </div>
             <!-- Series Cast: reuse character voices across books -->
             <div class="card mb-3" id="series-cast-card">
                 <div class="card-header d-flex justify-content-between align-items-center">
