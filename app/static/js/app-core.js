@@ -2998,22 +2998,92 @@
             updateVoiceCardVisibility();
         }
 
-        // --- Voice Library v1 ------------------------------------------------------
+        // --- Voice Library v2-A: browsing & discovery ------------------------
         // Voice discovery + audition. It reads the voices the app already has
         // (custom presets, LoRA adapters, clone imports, designed voices) and
         // never stores voice configuration of its own: picking a voice writes
-        // through the same character/state editor and save path as the Voices tab.
-        window._voiceLibrary = { catalog: [], loaded: false };
+        // through the same character/state editor and save path as the Voices
+        // tab.
+        //
+        // Shape: the catalog is fetched ONCE, then search / filter / sort run
+        // locally against a precomputed lowercase haystack, so typing never
+        // costs a request and never rebuilds the catalog. Filters AND together
+        // and are mirrored as removable chips. `sort` is a single stored key so
+        // later phases (recently used, Dice order) can slot in as another mode.
+        window._voiceBrowser = Object.assign({
+            catalog: [],
+            loaded: false,
+            loading: false,
+            error: '',
+            sort: 'relevance',
+            detailsKey: '',
+            filterSource: 'user',   // 'user' | 'context' -> chips can say so
+        }, window._voiceBrowser || {});
         // {speaker, stateKey, displayName, ageLabel, gender} while opened from a card.
         window._libraryContext = null;
 
+        const VOICE_LIBRARY_AGE_LABELS = {
+            child: 'Child', teen: 'Teen', young_adult: 'Young Adult', adult: 'Adult',
+            middle_aged: 'Middle Aged', elderly: 'Elderly', ageless: 'Ageless',
+            unspecified: 'Unspecified',
+        };
+        const VOICE_LIBRARY_GENDER_LABELS = {
+            male: 'Male', female: 'Female', unspecified: 'Unspecified',
+        };
+        const VOICE_LIBRARY_TYPE_LABELS = {
+            custom: 'Custom', builtin_lora: 'LoRA', lora: 'Trained LoRA',
+            clone: 'Clone', design: 'Design',
+        };
+
+        function voiceLibraryAgeLabel(age) {
+            return VOICE_LIBRARY_AGE_LABELS[String(age || '').toLowerCase()]
+                || String(age || 'Unspecified');
+        }
+        function voiceLibraryGenderLabel(gender) {
+            return VOICE_LIBRARY_GENDER_LABELS[String(gender || '').toLowerCase()]
+                || String(gender || 'Unspecified');
+        }
+
+        // /api/lora/models reports inferred_age "unknown" for voices it cannot
+        // date. That means the same thing to a user as "unspecified", and the
+        // Age filter has no "unknown" option, so such voices were both shown
+        // with a raw backend token and impossible to filter for. Normalise it
+        // here - display and filter only; the raw inferred_age from the API is
+        // never modified.
+        function normalizeVoiceAge(age) {
+            const value = String(age || '').toLowerCase();
+            return (!value || value === 'unknown') ? 'unspecified' : value;
+        }
+        function normalizeVoiceGender(gender) {
+            const value = String(gender || '').toLowerCase();
+            return (!value || value === 'unknown') ? 'unspecified' : value;
+        }
+
         // "Silky warm baritone, brisk and grounded" -> ["Silky warm baritone", "brisk..."]
+        // Descriptions also contain en-dash ranges ("30s–50s") and sentence
+        // tails, which split into long fragments. A tag is a short label, so
+        // clamp it: the full text stays on the card's description line and in
+        // its title attribute. Without this a single badge rendered ~420px wide
+        // and pushed past the card edge.
+        const VOICE_TAG_MAX = 28;
         function voiceTagsFrom(text) {
             return String(text || '')
                 .split(/[,;–—]|\s-\s/)
                 .map(t => t.trim())
                 .filter(t => t && t.length > 1)
-                .slice(0, 4);
+                .slice(0, 4)
+                .map(t => (t.length > VOICE_TAG_MAX
+                    ? t.slice(0, VOICE_TAG_MAX - 1).trimEnd() + '…'
+                    : t));
+        }
+
+        // Precomputed lowercase haystack so search never re-derives strings.
+        // Includes gender / age / type so "warm female young" can match facets.
+        function voiceSearchText(v) {
+            return [
+                v.name, v.description, (v.tags || []).join(' '), v.gender, v.age,
+                v.type, v.typeLabel, v.source,
+            ].filter(Boolean).join(' ').toLowerCase();
         }
 
         function buildVoiceLibraryCatalog() {
@@ -3027,45 +3097,60 @@
                 // the Voices card about what is built in, downloaded, previewable.
                 const isBuiltin = m.builtin === true;
                 const isDownloaded = m.downloaded !== false;
-                items.push({
+                const description = m.description || '';
+                const item = {
                     key: `lora:${m.id}`,
                     favId: m.id,                       // existing favorites store
+                    id: m.id,
                     name: m.name || m.id,
                     type: isBuiltin ? 'builtin_lora' : 'lora',
                     typeLabel: isBuiltin ? 'LoRA' : 'Trained LoRA',
-                    gender: m.inferred_gender || 'unspecified',
-                    age: m.inferred_age || 'unspecified',
-                    tags: voiceTagsFrom(m.description),
-                    description: m.description || '',
+                    source: isBuiltin ? 'Built-in LoRA library' : 'Locally trained LoRA',
+                    // Derived/display metadata. The raw manifest `gender` is
+                    // never touched (see inferred_gender on /api/lora/models).
+                    gender: normalizeVoiceGender(m.inferred_gender),
+                    age: normalizeVoiceAge(m.inferred_age),
+                    tags: voiceTagsFrom(description),
+                    description,
+                    sampleText: '',
                     favorite: !!m.favorite,
                     previewUrl: m.preview_audio_url || null,
                     previewEndpoint: `/api/lora/preview/${encodeURIComponent(m.id)}`,
                     available: isDownloaded,
-                });
+                    createdAt: m.created || m.retrained_at || '',
+                };
+                items.push(item);
                 seen.add(m.id);
             });
 
             (window._cloneVoicesCache || []).forEach(v => {
                 if (!v || !v.id) { return; }
+                const description = v.description || '';
                 items.push({
-                    key: `clone:${v.id}`, favId: `lib:clone:${v.id}`,
+                    key: `clone:${v.id}`, favId: `lib:clone:${v.id}`, id: v.id,
                     name: v.name || v.id, type: 'clone', typeLabel: 'Clone',
-                    gender: 'unspecified', age: 'unspecified',
-                    tags: voiceTagsFrom(v.description),
-                    description: v.description || '',
-                    favorite: false, previewUrl: null, previewEndpoint: null, available: true,
+                    source: 'Imported reference clip',
+                    gender: normalizeVoiceGender(v.gender), age: normalizeVoiceAge(v.age),
+                    tags: voiceTagsFrom(description),
+                    description, sampleText: v.ref_text || '',
+                    favorite: false, previewUrl: null, previewEndpoint: null,
+                    available: true, createdAt: v.created || '',
                 });
             });
 
             (window._designedVoicesCache || []).forEach(v => {
                 if (!v || !v.id) { return; }
+                const description = v.description || '';
                 items.push({
-                    key: `design:${v.id}`, favId: `lib:design:${v.id}`,
+                    key: `design:${v.id}`, favId: `lib:design:${v.id}`, id: v.id,
                     name: v.name || v.id, type: 'design', typeLabel: 'Design',
-                    gender: 'unspecified', age: 'unspecified',
-                    tags: voiceTagsFrom(v.description),
-                    description: v.description || '',
-                    favorite: false, previewUrl: null, previewEndpoint: null, available: true,
+                    source: 'Voice Designer',
+                    gender: normalizeVoiceGender(v.gender), age: normalizeVoiceAge(v.age),
+                    tags: voiceTagsFrom(description),
+                    description,
+                    sampleText: v.sample_text || '',
+                    favorite: false, previewUrl: null, previewEndpoint: null,
+                    available: true, createdAt: v.created || '',
                 });
             });
 
@@ -3073,29 +3158,44 @@
             (typeof AVAILABLE_VOICES !== 'undefined' ? AVAILABLE_VOICES : []).forEach(name => {
                 if (seen.has(name)) { return; }
                 items.push({
-                    key: `custom:${name}`, favId: `lib:custom:${name}`,
+                    key: `custom:${name}`, favId: `lib:custom:${name}`, id: name,
                     name, type: 'custom', typeLabel: 'Custom',
+                    source: 'Built-in preset',
+                    // Preset voices ship no demographic metadata; nothing to infer.
                     gender: 'unspecified', age: 'unspecified',
                     tags: [], description: 'Built-in preset voice',
-                    favorite: false, previewUrl: null, previewEndpoint: null, available: true,
+                    sampleText: '',
+                    favorite: false, previewUrl: null, previewEndpoint: null,
+                    available: true, createdAt: '',
                 });
             });
 
+            items.forEach(v => { v.searchText = voiceSearchText(v); });
             return items;
         }
 
         async function loadVoiceLibrary() {
-            window._voiceLibrary.loaded = true;
+            const lib = window._voiceBrowser;
+            lib.loading = true;
+            lib.error = '';
+            renderVoiceLibrary();
             try {
-                window._loraModelsCache = await API.get('/api/lora/models');
-            } catch (e) { console.debug('voice library: lora list failed', e); }
-            try {
-                window._cloneVoicesCache = await API.get('/api/clone_voices/list');
-            } catch (e) { console.debug('voice library: clone list failed', e); }
-            try {
-                window._designedVoicesCache = await API.get('/api/voice_design/list');
-            } catch (e) { console.debug('voice library: designed list failed', e); }
-            window._voiceLibrary.catalog = buildVoiceLibraryCatalog();
+                const [lora, clone, designed] = await Promise.all([
+                    API.get('/api/lora/models'),
+                    API.get('/api/clone_voices/list'),
+                    API.get('/api/voice_design/list'),
+                ]);
+                window._loraModelsCache = lora;
+                window._cloneVoicesCache = clone;
+                window._designedVoicesCache = designed;
+                lib.catalog = buildVoiceLibraryCatalog();
+                lib.loaded = true;
+                lib.loading = false;
+                lib.error = '';
+            } catch (e) {
+                lib.loading = false;
+                lib.error = (e && e.message) || 'Could not load the voice catalog.';
+            }
             renderVoiceLibrary();
         }
 
@@ -3109,6 +3209,8 @@
             };
         }
 
+        // Every whitespace-separated token must appear somewhere in the haystack,
+        // so "warm female young" narrows rather than requiring one exact phrase.
         function voiceLibraryMatches(voice, f) {
             if (f.gender && (voice.gender || 'unspecified') !== f.gender) { return false; }
             if (f.age && (voice.age || 'unspecified') !== f.age) { return false; }
@@ -3116,34 +3218,164 @@
             if (f.favorites === 'yes' && !voice.favorite) { return false; }
             if (f.favorites === 'no' && voice.favorite) { return false; }
             if (f.search) {
-                const hay = `${voice.name} ${voice.description} ${(voice.tags || []).join(' ')}`.toLowerCase();
-                if (!hay.includes(f.search)) { return false; }
+                const hay = voice.searchText || voiceSearchText(voice);
+                for (const token of f.search.split(/\s+/).filter(Boolean)) {
+                    if (!hay.includes(token)) { return false; }
+                }
             }
             return true;
+        }
+
+        function sortVoiceLibrary(list, mode) {
+            const copy = list.slice();
+            const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
+            const stamp = (v) => {
+                const t = Date.parse(v.createdAt || '');
+                return Number.isNaN(t) ? 0 : t;
+            };
+            if (mode === 'name') { copy.sort(byName); return copy; }
+            if (mode === 'favorites') {
+                copy.sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || byName(a, b));
+                return copy;
+            }
+            if (mode === 'newest' || mode === 'oldest') {
+                // Voices with no recorded date keep catalog order at the end
+                // rather than being dropped or treated as epoch 0.
+                copy.sort((a, b) => {
+                    const ta = stamp(a), tb = stamp(b);
+                    if (!ta && !tb) { return 0; }
+                    if (!ta) { return 1; }
+                    if (!tb) { return -1; }
+                    return mode === 'newest' ? tb - ta : ta - tb;
+                });
+                return copy;
+            }
+            return copy;   // relevance == catalog order (source order)
+        }
+
+        function renderVoiceLibraryActiveFilters(f) {
+            const host = document.getElementById('vl-active-filters');
+            if (!host) { return; }
+            const chips = [];
+            if (f.search) { chips.push(['search', `“${f.search}”`, 'Search']); }
+            if (f.gender) { chips.push(['gender', voiceLibraryGenderLabel(f.gender), 'Gender']); }
+            if (f.age) { chips.push(['age', voiceLibraryAgeLabel(f.age), 'Age']); }
+            if (f.type) { chips.push(['type', VOICE_LIBRARY_TYPE_LABELS[f.type] || f.type, 'Type']); }
+            if (f.favorites === 'yes') { chips.push(['favorites', 'Favorites', '★']); }
+            if (f.favorites === 'no') { chips.push(['favorites', 'Not favorites', '☆']); }
+
+            if (!chips.length) { host.style.display = 'none'; host.innerHTML = ''; return; }
+            const fromContext = window._voiceBrowser.filterSource === 'context';
+            host.style.display = '';
+            host.innerHTML = chips.map(([key, label]) =>
+                `<button class="btn btn-sm btn-outline-secondary py-0" type="button"
+                     onclick="clearVoiceLibraryFilter('${key}')"
+                     title="Remove this filter">${escapeHtml(label)} <span aria-hidden="true">&times;</span></button>`
+            ).join('')
+                + (fromContext ? '<span class="small text-muted ms-1">from character state</span>' : '')
+                + '<button class="btn btn-sm btn-link py-0" type="button" onclick="clearVoiceLibraryFilters()">Clear all</button>';
+        }
+
+        window.clearVoiceLibraryFilter = function clearVoiceLibraryFilter(key) {
+            if (key === 'search') {
+                const el = document.getElementById('vl-search');
+                if (el) { el.value = ''; }
+            } else {
+                const el = document.getElementById('vl-' + key);
+                if (el) { el.value = ''; }
+            }
+            window._voiceBrowser.filterSource = 'user';
+            renderVoiceLibrary();
+        };
+
+        function voiceLibraryCardMarkup(v, ctx) {
+            const key = escapeHtml(v.key);
+            const expanded = window._voiceBrowser.detailsKey === v.key;
+            const previewLabel = v.previewUrl || v.previewEndpoint
+                ? 'Play a sample' : 'No preview available';
+            const typeBadge = `<span class="badge bg-secondary">${escapeHtml(v.typeLabel)}</span>`;
+            const avail = v.available ? '' : '<span class="badge bg-warning text-dark">Not downloaded</span>';
+            const favoriteBtn = `<button class="btn btn-sm ${v.favorite ? 'btn-warning' : 'btn-outline-warning'}"
+                    type="button" onclick="toggleLibraryVoiceFavorite('${key}')"
+                    aria-pressed="${v.favorite ? 'true' : 'false'}"
+                    title="${v.favorite ? 'Remove from favorites' : 'Add to favorites'}">${v.favorite ? '★' : '☆'}</button>`;
+            const details = expanded ? `
+                <div class="vl-details border-top mt-2 pt-2 small">
+                    ${v.description ? `<div class="mb-1"><strong>Description:</strong> ${escapeHtml(v.description)}</div>` : ''}
+                    <div class="mb-1"><strong>Source:</strong> ${escapeHtml(v.source || v.typeLabel)}</div>
+                    <div class="mb-1"><strong>Gender:</strong> ${escapeHtml(voiceLibraryGenderLabel(v.gender))} &middot; <strong>Age:</strong> ${escapeHtml(voiceLibraryAgeLabel(v.age))}</div>
+                    ${v.tags.length ? `<div class="mb-1"><strong>Tags:</strong> ${v.tags.map(t => `<span class="badge bg-light text-dark border me-1">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+                    ${v.sampleText ? `<div class="mb-1"><strong>Preview text:</strong> <em>${escapeHtml(v.sampleText)}</em></div>` : ''}
+                    ${v.createdAt ? `<div class="mb-1"><strong>Created:</strong> ${escapeHtml(String(v.createdAt))}</div>` : ''}
+                    <div class="mb-1"><strong>Favorite:</strong> ${v.favorite ? 'Yes' : 'No'}</div>
+                    <div class="mb-1"><strong>Preview:</strong> ${previewLabel}</div>
+                </div>` : '';
+            return `
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card h-100" data-vl-key="${key}">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <strong class="text-truncate">${escapeHtml(v.name)}</strong>
+                                ${favoriteBtn}
+                            </div>
+                            <div class="small text-muted text-truncate" title="${escapeHtml(v.description || '')}">${escapeHtml(v.description || 'No description')}</div>
+                            <div class="small text-muted">${escapeHtml(voiceLibraryGenderLabel(v.gender))} &middot; ${escapeHtml(voiceLibraryAgeLabel(v.age))} &middot; ${escapeHtml(v.typeLabel)}</div>
+                            ${v.tags.length ? `<div class="small text-muted vl-tags">${v.tags.slice(0, 3).map(t => `<span class="badge bg-light text-dark border me-1">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+                            <div class="d-flex flex-wrap align-items-center gap-1 mt-2">
+                                ${typeBadge}${avail}
+                                <span class="ms-auto"></span>
+                                <button class="btn btn-sm btn-outline-primary" type="button"
+                                        onclick="previewLibraryVoice('${key}', this)"
+                                        ${v.previewUrl || v.previewEndpoint ? '' : 'disabled'}
+                                        title="${escapeHtml(previewLabel)}">&#9654; Preview</button>
+                                <button class="btn btn-sm btn-outline-success" type="button"
+                                        onclick="selectLibraryVoice('${key}')">Select</button>
+                                <button class="btn btn-sm btn-outline-secondary" type="button"
+                                        onclick="toggleVoiceLibraryDetails('${key}')"
+                                        aria-expanded="${expanded ? 'true' : 'false'}">${expanded ? 'Less' : 'Details'}</button>
+                            </div>
+                            ${details}
+                        </div>
+                    </div>
+                </div>`;
         }
 
         function renderVoiceLibrary() {
             const grid = document.getElementById('voice-library-grid');
             if (!grid) { return; }
-            const all = window._voiceLibrary.catalog || [];
+            const lib = window._voiceBrowser;
             const f = readVoiceLibraryFilters();
-            const shown = all.filter(v => voiceLibraryMatches(v, f));
+            renderVoiceLibraryActiveFilters(f);
 
-            const count = document.getElementById('voice-library-count');
-            if (count) {
-                count.textContent = all.length ? `${shown.length} of ${all.length} voices` : '';
-            }
             const ctx = window._libraryContext;
             const ctxEl = document.getElementById('voice-library-context');
             if (ctxEl) {
                 ctxEl.style.display = ctx ? '' : 'none';
                 if (ctx) {
-                    ctxEl.innerHTML = `<i class="fas fa-user-check me-1"></i>Selecting a voice for: `
+                    ctxEl.innerHTML = `<i class="fas fa-user-check me-1"></i>Current state: `
                         + `<strong>${escapeHtml(ctx.displayName || ctx.speaker)}</strong>`
-                        + (ctx.stateKey ? ` &middot; ${escapeHtml(ctx.ageLabel || ctx.stateKey)}`
-                                        + (ctx.gender ? ` &middot; ${escapeHtml(ctx.gender)}` : '')
-                                        : ' (character voice)');
+                        + (ctx.stateKey ? ` &middot; ${escapeHtml(ctx.gender || 'UNSPECIFIED')} &middot; ${escapeHtml(ctx.ageLabel || ctx.stateKey)}`
+                                        : ' (character voice)')
+                        + ' &mdash; Select assigns this voice to it.';
                 }
+            }
+
+            if (lib.loading) {
+                grid.innerHTML = '<div class="col-12"><p class="text-muted mb-0">Loading voices…</p></div>';
+                return;
+            }
+            if (lib.error) {
+                grid.innerHTML = '<div class="col-12"><div class="alert alert-warning mb-0">'
+                    + `${escapeHtml(lib.error)} The existing voice assignments are unaffected.`
+                    + ' <button class="btn btn-sm btn-outline-secondary" type="button" onclick="loadVoiceLibrary()">Retry</button></div></div>';
+                return;
+            }
+
+            const all = lib.catalog || [];
+            const matched = all.filter(v => voiceLibraryMatches(v, f));
+            const count = document.getElementById('voice-library-count');
+            if (count) {
+                count.textContent = all.length ? `${matched.length} of ${all.length} voices` : '';
             }
 
             if (!all.length) {
@@ -3151,45 +3383,66 @@
                     + '<button class="btn btn-sm btn-outline-primary" type="button" onclick="document.getElementById(\'vl-upload-input\').click()">+ Add / Upload Voice</button></div>';
                 return;
             }
+
+            const shown = sortVoiceLibrary(matched, lib.sort);
             if (!shown.length) {
-                grid.innerHTML = '<div class="col-12"><p class="text-muted mb-2">No voices match the current search and filters.</p>'
-                    + '<button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearVoiceLibraryFilters()">Clear Filters</button></div>';
+                const active = [];
+                if (f.search) { active.push('search'); }
+                if (f.gender || f.age || f.type || f.favorites) { active.push('filters'); }
+                grid.innerHTML = '<div class="col-12"><p class="text-muted mb-2">'
+                    + (active.length
+                        ? 'No voices match the current search and filters.'
+                        : 'No voices available yet.')
+                    + '</p><button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearVoiceLibraryFilters()">Clear Filters</button></div>';
                 return;
             }
-
-            grid.innerHTML = shown.map(v => `
-                <div class="col-12 col-md-6 col-xl-4">
-                    <div class="card h-100" data-vl-key="${escapeHtml(v.key)}">
-                        <div class="card-body py-2">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <strong>${escapeHtml(v.name)}</strong>
-                                <button class="btn btn-sm py-0 ${v.favorite ? 'btn-warning' : 'btn-outline-warning'}"
-                                        type="button" onclick="toggleLibraryVoiceFavorite('${escapeHtml(v.key)}')"
-                                        title="${v.favorite ? 'Remove from favorites' : 'Add to favorites'}">${v.favorite ? '★' : '☆'}</button>
-                            </div>
-                            <div class="small text-muted">${escapeHtml(v.gender === 'unspecified' ? 'Unspecified' : v.gender)} &middot; ${escapeHtml(v.age === 'unspecified' ? 'Unspecified' : String(v.age).replace(/_/g, ' '))}</div>
-                            ${v.tags.length ? `<div class="small text-muted">${v.tags.map(t => `<span class="badge bg-light text-dark border me-1">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
-                            <div class="d-flex align-items-center gap-1 mt-2">
-                                <span class="badge bg-secondary">${escapeHtml(v.typeLabel)}</span>
-                                ${v.available ? '' : '<span class="badge bg-warning text-dark">Not downloaded</span>'}
-                                <span class="ms-auto"></span>
-                                <button class="btn btn-sm btn-outline-primary py-0" type="button"
-                                        onclick="previewLibraryVoice('${escapeHtml(v.key)}', this)"
-                                        title="${v.previewUrl || v.previewEndpoint ? 'Play a sample' : 'No preview available'}">&#9654; Preview</button>
-                                <button class="btn btn-sm btn-outline-success py-0" type="button"
-                                        onclick="selectLibraryVoice('${escapeHtml(v.key)}')">Select</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>`).join('');
+            grid.innerHTML = shown.map(v => voiceLibraryCardMarkup(v, ctx)).join('');
         }
 
-        function onVoiceLibraryFilterChange() { renderVoiceLibrary(); }
+        let _vlSearchTimer = null;
+        function onVoiceLibraryFilterChange() {
+            window._voiceBrowser.filterSource = 'user';
+            renderVoiceLibrary();
+        }
+        function onVoiceLibrarySearchInput() {
+            // Debounced so a fast typist does not re-render per keystroke.
+            clearTimeout(_vlSearchTimer);
+            _vlSearchTimer = setTimeout(() => {
+                window._voiceBrowser.filterSource = 'user';
+                renderVoiceLibrary();
+            }, 120);
+        }
+        window.onVoiceLibrarySearchInput = onVoiceLibrarySearchInput;
+        window.onVoiceLibrarySortChange = function onVoiceLibrarySortChange() {
+            window._voiceBrowser.sort = document.getElementById('vl-sort')?.value || 'relevance';
+            renderVoiceLibrary();
+        };
+
+        window.toggleVoiceLibraryDetails = function toggleVoiceLibraryDetails(key) {
+            window._voiceBrowser.detailsKey =
+                window._voiceBrowser.detailsKey === key ? '' : key;
+            renderVoiceLibrary();
+        };
 
         function clearVoiceLibraryFilters() {
             ['vl-search', 'vl-gender', 'vl-age', 'vl-type', 'vl-favorites']
                 .forEach(id => { const el = document.getElementById(id); if (el) { el.value = ''; } });
+            window._voiceBrowser.filterSource = 'user';
             renderVoiceLibrary();
+        }
+        window.clearVoiceLibraryFilters = clearVoiceLibraryFilters;
+
+        function applyVoiceLibraryContextFilters(ctx) {
+            // Prefill gender/age from the character state so the library opens on
+            // a useful slice. Generic: derived from whatever state is active, and
+            // always clearable by the user.
+            if (!ctx || !ctx.stateKey) { return; }
+            const g = document.getElementById('vl-gender');
+            const a = document.getElementById('vl-age');
+            const gender = String(ctx.gender || '').toLowerCase();
+            const ageKey = String(ctx.ageLabel || '').toLowerCase().replace(/\s+/g, '_');
+            if (g && VOICE_LIBRARY_GENDER_LABELS[gender]) { g.value = gender; }
+            if (a && VOICE_LIBRARY_AGE_LABELS[ageKey]) { a.value = ageKey; }
         }
 
         window.openVoiceLibrary = async function openVoiceLibrary(speaker, stateKey) {
@@ -3203,10 +3456,16 @@
                     ageLabel: state ? stateAgeLabel(state.age_group) : '',
                     gender: state ? state.gender : '',
                 };
+                applyVoiceLibraryContextFilters(window._libraryContext);
+                window._voiceBrowser.filterSource = 'context';
             } else {
                 window._libraryContext = null;
             }
-            if (!window._voiceLibrary.loaded) { await loadVoiceLibrary(); } else { renderVoiceLibrary(); }
+            if (!window._voiceBrowser.loaded && !window._voiceBrowser.loading) {
+                await loadVoiceLibrary();
+            } else {
+                renderVoiceLibrary();
+            }
             const card = document.getElementById('voice-library-card');
             if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
         };
@@ -3217,33 +3476,36 @@
         };
 
         window.toggleLibraryVoiceFavorite = async function toggleLibraryVoiceFavorite(key) {
-            const voice = (window._voiceLibrary.catalog || []).find(v => v.key === key);
+            const voice = (window._voiceBrowser.catalog || []).find(v => v.key === key);
             if (!voice) { return; }
+            const wasFavorite = voice.favorite;
+            // Optimistic: flip locally and repaint without waiting for the round-trip.
+            voice.favorite = !wasFavorite;
+            renderVoiceLibrary();
             try {
-                // Same store the app already uses (voice_library.json "favorites").
                 const res = await API.post(`/api/voice_library/favorites/${encodeURIComponent(voice.favId)}`);
                 const favorites = new Set(res.favorites || []);
-                window._voiceLibrary.catalog.forEach(v => {
-                    v.favorite = favorites.has(v.favId);
-                });
+                window._voiceBrowser.catalog.forEach(v => { v.favorite = favorites.has(v.favId); });
                 if (window._loraModelsCache) {
                     window._loraModelsCache.forEach(m => { if (m && m.id) { m.favorite = favorites.has(m.id); } });
                 }
                 renderVoiceLibrary();
             } catch (e) {
+                voice.favorite = wasFavorite;   // revert on failure
+                renderVoiceLibrary();
                 showToast('Could not update favorite: ' + e.message, 'error');
             }
         };
 
         window.previewLibraryVoice = async function previewLibraryVoice(key, btn) {
-            const voice = (window._voiceLibrary.catalog || []).find(v => v.key === key);
+            const voice = (window._voiceBrowser.catalog || []).find(v => v.key === key);
             if (!voice) { return; }
             const audio = document.getElementById('voice-library-audio');
             if (!audio) { return; }
-            const original = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+            const original = '&#9654; Preview';
             let url = voice.previewUrl;
             if (!url && voice.previewEndpoint) {
-                if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
                 try {
                     const res = await API.post(voice.previewEndpoint, {});
                     url = res && res.audio_url;
@@ -3263,7 +3525,7 @@
         };
 
         window.selectLibraryVoice = async function selectLibraryVoice(key) {
-            const voice = (window._voiceLibrary.catalog || []).find(v => v.key === key);
+            const voice = (window._voiceBrowser.catalog || []).find(v => v.key === key);
             if (!voice) { return; }
             const ctx = window._libraryContext;
             // No character context: nothing to assign to, so just surface the pick.

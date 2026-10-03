@@ -1710,7 +1710,7 @@
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                         <div class="input-group input-group-sm" style="width: 260px;">
                             <span class="input-group-text">Search</span>
-                            <input class="form-control" id="vl-search" type="search" placeholder="Voice name or description" oninput="onVoiceLibraryFilterChange()" autocomplete="off">
+                            <input class="form-control" id="vl-search" type="search" placeholder="Voice name, description, tags…" oninput="onVoiceLibrarySearchInput()" autocomplete="off">
                         </div>
                         <div class="input-group input-group-sm" style="width: 165px;">
                             <span class="input-group-text">Gender</span>
@@ -1754,10 +1754,22 @@
                                 <option value="no">Not Favorites</option>
                             </select>
                         </div>
+                        <div class="input-group input-group-sm" style="width: 190px;">
+                            <span class="input-group-text">Sort</span>
+                            <select class="form-select" id="vl-sort" onchange="onVoiceLibrarySortChange()">
+                                <option value="relevance">Relevance</option>
+                                <option value="name">Name</option>
+                                <option value="favorites">Favorites first</option>
+                                <option value="newest">Newest</option>
+                                <option value="oldest">Oldest</option>
+                            </select>
+                        </div>
                         <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearVoiceLibraryFilters()">Clear Filters</button>
                         <button class="btn btn-sm btn-outline-primary ms-auto" type="button" onclick="document.getElementById('vl-upload-input').click()"><i class="fas fa-plus me-1"></i>Add / Upload Voice</button>
                         <input type="file" id="vl-upload-input" accept=".wav,.mp3,.flac,.ogg" style="display:none" onchange="handleCloneVoiceUpload(this)">
                     </div>
+                    <!-- Active filters, each individually removable -->
+                    <div id="vl-active-filters" class="d-flex flex-wrap align-items-center gap-1 mb-2" style="display:none;"></div>
                     <div id="voice-library-grid" class="row g-2"></div>
                 </div>
                 <audio id="voice-library-audio" style="display:none"></audio>
