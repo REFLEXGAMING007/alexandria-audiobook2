@@ -8,8 +8,8 @@
  * widening what the namespace exposes. The state read/write surface is
  * republished flat because that is the ergonomic entry point for panels; it
  * holds the same function references as `state`, so there is exactly one
- * dispatch path (CLAUDE.md Rule 15). `api` and `state` stay attached as the
- * module-level detail they are.
+ * dispatch path (CLAUDE.md Rule 15). `api`, `state` and `selectors` stay
+ * attached as the module-level detail they are.
  *
  * The usual path into Voices V2 is activateTab('voicesv2') -> mount(). The
  * guard below is a second path: restoreTab() runs at the end of app-reports.js,
@@ -23,9 +23,10 @@
 
     var core = namespace.core;
     var state = namespace.state;
+    var selectors = namespace.selectors;
     var lifecycle = namespace.lifecycle;
 
-    namespace.phase = 0;
+    namespace.phase = 1;
     namespace.root = core.ROOT_ID;
 
     namespace.mount = lifecycle.mount;
@@ -37,6 +38,13 @@
     namespace.select = state.select;
     namespace.subscribe = state.subscribe;
     namespace.dispatch = state.dispatch;
+
+    /* The selectors are exposed because the whole point of Phase 1 is that a
+     * view is a pure function of the projection, and an external caller must be
+     * able to ask the same questions the panels ask. */
+    namespace.visibleCharacters = selectors.selectVisible;
+    namespace.characterSummary = selectors.selectSummary;
+    namespace.selectedCharacter = selectors.selectSelected;
 
     var root = core.getRoot();
     if (root && root.style.display === 'block' && !lifecycle.isMounted()) {

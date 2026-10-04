@@ -26,6 +26,14 @@
         return document.getElementById(ROOT_ID);
     }
 
+    /* Every V2-owned element is a `[data-voicesv2-region]` descendant of that
+     * root, addressed by name. Panels therefore cannot reach a V2 element by
+     * guessing an id, and cannot reach outside the tab at all. */
+    function region(name) {
+        var root = getRoot();
+        return root ? root.querySelector('[data-voicesv2-region="' + name + '"]') : null;
+    }
+
     function contains(node) {
         var root = getRoot();
         return !!(root && node && root.contains(node));
@@ -56,6 +64,7 @@
         NAMESPACE: NAMESPACE,
         ROOT_ID: ROOT_ID,
         getRoot: getRoot,
+        region: region,
         contains: contains,
         escape: escape,
         notify: notify,

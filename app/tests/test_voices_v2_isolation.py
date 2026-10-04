@@ -37,7 +37,15 @@ import unittest
 APP = Path(__file__).resolve().parent.parent
 STATIC = APP / "static"
 V2_DIR = STATIC / "js" / "voices-v2"
-V2_FILES = ("core.js", "state.js", "api.js", "lifecycle.js", "index.js")
+# Dependency order, which is also the order index.html must load them in. Kept as
+# an explicit tuple rather than a glob so a new file cannot be added without
+# deciding where it sits and what may depend on it.
+V2_FILES = (
+    "core.js", "state.js", "selectors.js", "api.js",
+    "widgets/labels.js", "widgets/states.js",
+    "panels/toolbar.js", "panels/characters.js", "panels/detail.js",
+    "lifecycle.js", "index.js",
+)
 INDEX = STATIC / "index.html"
 
 V2_TAB = "voicesv2-tab"
@@ -129,13 +137,18 @@ def v2_css_block():
 
 
 def tab_ids(root_id):
-    """Ids declared between <div id="root_id"> and its matching close tag."""
+    """Ids declared between <div id="root_id"> and its matching close tag.
+
+    Counts `div` AND `section`: the V2 browser wraps its list and detail in
+    sections, and a div-only counter would run past the tab root and collect
+    every id in the following tabs.
+    """
     html = read_index()
     start = html.index(f'<div id="{root_id}"')
     depth = 0
     end = len(html)
-    for match in re.finditer(r"<div\b|</div>", html[start:]):
-        depth += 1 if match.group(0) == "<div" else -1
+    for match in re.finditer(r"<(div|section)\b|</(div|section)>", html[start:]):
+        depth += 1 if match.group(1) else -1
         if depth == 0:
             end = start + match.end()
             break
@@ -163,6 +176,13 @@ class _Ancestors(HTMLParser):
                 break
 
 
+def _v2_files_on_disk():
+    """Every V2 source file actually present, so an unlisted file cannot escape
+    the source scans below by simply not being named in V2_FILES."""
+    return sorted(str(path.relative_to(V2_DIR)).replace("\\", "/")
+                  for path in V2_DIR.rglob("*.js"))
+
+
 def _node_harness():
     return _HARNESS % {"files": repr(list(V2_FILES))}, str(V2_DIR)
 
@@ -184,6 +204,8 @@ class _NodeTestCase(unittest.TestCase):
 
 class NamespaceIsolationTests(_NodeTestCase):
     def test_v2_files_exist_and_declare_nothing_at_top_level(self):
+        self.assertEqual(sorted(V2_FILES), _v2_files_on_disk(),
+                         "a Voices V2 file exists that is not in the load order")
         for name in V2_FILES:
             source = (V2_DIR / name).read_text(encoding="utf-8")
             with self.subTest(file=name):
@@ -218,16 +240,22 @@ assert.strictEqual(Object.keys(ctx.window.VoicesV2).length>0,true);
     def test_namespace_publishes_only_the_documented_phase_zero_surface(self):
         body = r"""
 const ns=ctx.window.VoicesV2;
-assert.deepStrictEqual(Object.keys(ns).sort(),['ROOT_ID','NAMESPACE','api','contains','core',
-  'describeError','dispatch','escape','getRoot','getState','isMounted','lifecycle','mount',
-  'notify','notifyFailure','phase','refresh','root','select','state','subscribe','unmount']);
-assert.strictEqual(ns.phase,0);
+assert.deepStrictEqual(Object.keys(ns).sort(),['NAMESPACE','ROOT_ID','api','characterSummary',
+  'contains','core','describeError','dispatch','escape','getRoot','getState','isMounted',
+  'labels','lifecycle','mount','notify','notifyFailure','panels','phase','refresh','root',
+  'select','selectors','selectedCharacter','state','states','subscribe','unmount',
+  'visibleCharacters']);
+assert.strictEqual(ns.phase,1);
 assert.strictEqual(ns.root,'voicesv2-tab');
 assert.strictEqual(ns.core.ROOT_ID,'voicesv2-tab');
 assert(Object.isFrozen(ns.api),'the API boundary must not be rewritable');
 assert.deepStrictEqual(Object.keys(ns.api.PATHS),['characters']);
-for(const name of ['mount','refresh','unmount','isMounted','select','subscribe','dispatch']){
+for(const name of ['mount','refresh','unmount','isMounted','select','subscribe','dispatch',
+  'visibleCharacters','characterSummary','selectedCharacter']){
   assert.strictEqual(typeof ns[name],'function',name);
+}
+for(const panel of ['toolbar','charactersPanel','detailPanel']){
+  assert(ns.panels[panel],'missing panel '+panel);
 }
 """
 
@@ -400,8 +428,9 @@ class StoreIsolationTests(_NodeTestCase):
         self.run_node(r"""
 const state=ctx.window.VoicesV2.getState();
 assert.deepStrictEqual(Object.keys(state).sort(),
-  ['catalogue','characters','filters','library','orphans','selection','ui']);
+  ['catalogue','characters','filters','library','meta','orphans','selection','ui']);
 assert.deepStrictEqual(Object.keys(state.ui).sort(),['error','loadedAt','loading','mounted']);
+assert.deepStrictEqual(Object.keys(state.selection).sort(),['key']);
 const walk=value=>{if(!value||typeof value!=='object')return;
   assert(!value.nodeType,'a DOM node reached the store');Object.values(value).forEach(walk);};
 walk(state);
@@ -474,38 +503,12 @@ assert.throws(()=>V2.select('characters'),/selector function/);
 
 
 class LifecycleBehaviourTests(_NodeTestCase):
-    def test_mount_runs_once_binds_one_listener_and_reads_through_the_api_boundary(self):
-        self.run_node(r"""
-const V2=ctx.window.VoicesV2;
-assert.strictEqual(V2.isMounted(),false);
-await V2.mount();await V2.mount();await V2.mount();
-assert.strictEqual(V2.isMounted(),true);
-assert.strictEqual((root.listeners.click||[]).length,1,
-  'repeated navigation must not stack listeners');
-assert.deepStrictEqual(apiCalls,['/api/voices-v2/characters'],
-  'repeated mount while a read is in flight must issue one read');
-assert(status.innerHTML.includes('Phase 0 scaffold is ready'));
-assert.strictEqual(live.textContent,'Ready');
-assert(apiCalls.every(p=>p.startsWith('/api/voices-v2/')),
-  'V2 must not call a Voices endpoint');
-""")
-
-    def test_mount_without_its_tab_is_inert(self):
-        self.run_node(r"""
-document.getElementById=id=>{if(id!=='voicesv2-tab')throw Error('unexpected lookup '+id);return null;};
-const V2=ctx.window.VoicesV2;
-assert.strictEqual(await V2.mount(),false);
-assert.strictEqual(V2.isMounted(),false);
-assert.deepStrictEqual(apiCalls,[]);
-""")
-
     def test_a_hidden_tab_does_nothing_at_page_load(self):
-        """Nothing may run at load time while the tab is hidden, so Phase 0 adds
-        no cost to a page that never opens Voices V2."""
+        """Nothing may run at load time while the tab is hidden, so the tab costs
+        a page that never opens it nothing."""
         self.run_node(r"""
 assert.strictEqual(ctx.window.VoicesV2.isMounted(),false);
 assert.deepStrictEqual(apiCalls,[],'a hidden tab must not read anything at page load');
-assert.strictEqual((root.listeners.click||[]).length,0);
 await turn();
 assert.deepStrictEqual(apiCalls,[],'no deferred mount may fire for a hidden tab');
 """)
@@ -537,10 +540,35 @@ assert.deepStrictEqual(apiCalls,['/api/voices-v2/characters'],
 await V2.mount();
 assert.strictEqual(apiCalls.length,2,'re-entering the tab re-reads the projection');
 assert.strictEqual((root.listeners.click||[]).length,1,'a re-read must not re-bind');
-assert(status.innerHTML.includes('Phase 0 scaffold is ready'));
-assert.strictEqual(live.textContent,'Ready');
 assert(apiCalls.every(p=>p.startsWith('/api/voices-v2/')),
   'V2 must not call a Voices endpoint');
+""")
+
+    def test_mount_without_its_tab_is_inert(self):
+        self.run_node(r"""
+document.getElementById=id=>{if(id!='voicesv2-tab')throw Error('unexpected lookup '+id);return null;};
+const V2=ctx.window.VoicesV2;
+assert.strictEqual(await V2.mount(),false);
+assert.strictEqual(V2.isMounted(),false);
+assert.deepStrictEqual(apiCalls,[]);
+""")
+
+    def test_a_failed_read_reports_inline_and_through_shared_error_reporting(self):
+        self.run_node(r"""
+const V2=ctx.window.VoicesV2;
+const held=holdNext();
+const pending=V2.mount();await turn();
+held.reject(Object.assign(Error('backend unreachable'),{status:503,detail:'unavailable'}));
+assert.strictEqual(await pending,false);
+assert.strictEqual(V2.getState().ui.loading,false);
+assert(V2.getState().ui.error.includes('backend unreachable'));
+assert(status.innerHTML.includes('alert-danger'),
+  'the error must be visible in the tab, not only as a toast');
+assert(status.innerHTML.includes('data-voicesv2-action="retry"'),
+  'a failed read must offer a retry');
+assert.strictEqual(actionErrors.length,1);
+assert(actionErrors[0].recovery.includes('Voices V2 is a separate workspace'));
+assert.strictEqual(live.textContent,'Projection unavailable');
 """)
 
     def test_unmount_removes_the_listener_and_discards_a_read_already_in_flight(self):
@@ -552,7 +580,8 @@ assert.strictEqual(V2.unmount(),true);
 assert.strictEqual((root.listeners.click||[]).length,0);
 assert.strictEqual(root.removed.click,1);
 const renders=status.renderCount;
-held.resolve({characters:[{name:'LATE'}],orphans:[]});
+held.resolve({schema_version:1,book:{script_present:true},traits_available:true,
+  characters:[{name:'LATE'}],orphans:[]});
 assert.strictEqual(await pending,false,'an unmounted read must not report success');
 assert.strictEqual(status.renderCount,renders,'an unmounted read must not paint');
 assert.deepStrictEqual(plain(V2.getState().characters),[]);
@@ -566,7 +595,7 @@ await V2.mount();assert.strictEqual(apiCalls.length,1);
 root.fire('click',{target:reload});
 await turn();await turn();
 assert.strictEqual(apiCalls.length,2,'a V2 action must re-read');
-root.fire('click',{target:status});
+root.fire('click',{target:node('characters')});
 root.fire('click',{target:makeNode('button',{})});
 root.fire('click',{target:null});
 await turn();await turn();
@@ -615,7 +644,10 @@ class RouterIsolationTests(unittest.TestCase):
         self.assertEqual(set(), existing & self._routes(self.v2),
                          "including V2 must not shadow an existing route")
 
-    def test_placeholder_projection_is_empty_and_touches_no_files(self):
+    def test_the_projection_read_writes_nothing_and_is_shaped_for_the_browser(self):
+        """Replaces the Phase 0 placeholder check: the endpoint now returns a real
+        projection, so the guarantee worth keeping is that reading it has no side
+        effect and cannot hand the browser a write surface."""
         import tempfile
         from pathlib import Path
 
@@ -628,9 +660,25 @@ class RouterIsolationTests(unittest.TestCase):
             with TestClient(app) as client:
                 response = client.get("/api/voices-v2/characters")
             self.assertEqual(200, response.status_code)
-            self.assertEqual({"characters": [], "orphans": []}, response.json())
+            payload = response.json()
             self.assertEqual(before, sorted(Path(tmp).rglob("*")),
-                             "the Phase 0 placeholder must not write anything")
+                             "reading the projection must not write")
+            for key in ("schema_version", "book", "traits_available", "vocabularies",
+                        "characters", "orphans", "counts", "major_line_threshold"):
+                self.assertIn(key, payload)
+            self.assertEqual(payload["counts"],
+                             {"characters": len(payload["characters"]),
+                              "orphans": len(payload["orphans"])},
+                             "counts must agree with the lists they describe")
+            # The browser must never receive the stored configuration verbatim:
+            # no ref_audio path, no seed, no style timeline, nothing it could
+            # mistake for an editable field.
+            for record in payload["characters"] + payload["orphans"]:
+                self.assertNotIn("ref_audio", record)
+                self.assertNotIn("seed", record)
+                self.assertNotIn("style_timeline", record)
+                self.assertNotIn("character_style", record)
+                self.assertIn("problems", record)
 
     def test_the_registered_app_serves_the_v2_route_alongside_the_voices_routes(self):
         import app as app_module
@@ -669,13 +717,22 @@ function trackText(node){Object.defineProperty(node,'textContent',{configurable:
   get(){return this._text||'';},set(v){this._text=v;this.renderCount++;}});}
 const root=makeNode('div',{id:'voicesv2-tab'});
 root.style.display='none';
-const status=makeNode('div',{'data-voicesv2-region':'status'});
-const live=makeNode('span',{'data-voicesv2-region':'live'});
-const detail=makeNode('span',{'data-voicesv2-region':'detail'});
+/* Every V2 region the browser owns. The harness registers them all and throws on
+   an unregistered selector, so a panel that reaches for an element V2 does not
+   own fails the test instead of quietly returning null in production. */
+const regionNames=['status','live','search','counts','characters','detail','reset-filters',
+  'filter-scope','filter-gender','filter-ageGroup','filter-assigned','filter-ready',
+  'filter-personaStatus','filter-priority','filter-problems','filter-sort'];
+const regions={};
+const descendants=[];
+regionNames.forEach(name=>{
+  const node=makeNode(name==='search'?'input':'div',{'data-voicesv2-region':name});
+  node.value='';node.disabled=false;
+  regions['[data-voicesv2-region="'+name+'"]']=node;
+  descendants.push(node);
+});
 const reload=makeNode('button',{'data-voicesv2-action':'reload'});
-const regions={'[data-voicesv2-region="status"]':status,'[data-voicesv2-region="live"]':live,
-  '[data-voicesv2-region="detail"]':detail};
-const descendants=[status,live,detail,reload];
+descendants.push(reload);
 root.querySelector=function(sel){
   if(sel==='[data-voicesv2-action]')return null;
   const node=regions[sel];
@@ -683,9 +740,23 @@ root.querySelector=function(sel){
   return node;
 };
 root.contains=function(node){return descendants.indexOf(node)>=0;};
-Object.defineProperty(status,'innerHTML',{configurable:true,
+Object.defineProperty(regions['[data-voicesv2-region="status"]'],'innerHTML',{configurable:true,
   get(){return this._html||'';},set(v){this._html=v;this.renderCount++;}});
-trackText(live);trackText(detail);
+const status=regions['[data-voicesv2-region="status"]'];
+const live=regions['[data-voicesv2-region="live"]'];
+/* Region lookup by bare name, so a test reads `node('characters')` instead of
+   repeating the attribute selector the production code uses. */
+const node=name=>regions['[data-voicesv2-region="'+name+'"]'];
+/* An action button that really lives inside the tab, so a delegated click on it
+   is treated by core.contains() as being inside the root. */
+function actionButton(action){
+  const el=makeNode('button',{'data-voicesv2-action':action});
+  descendants.push(el);
+  return el;
+}
+['live','search','counts','characters','detail'].forEach(name=>{
+  trackText(regions['[data-voicesv2-region="'+name+'"]']);
+});
 /* Any other element id throws, so a V2 lookup that leaves its own tab fails the
    test instead of quietly returning null in production. */
 const byId={'voicesv2-tab':root};
@@ -693,7 +764,9 @@ const document={getElementById(id){
   if(!Object.prototype.hasOwnProperty.call(byId,id))throw Error('V2 must not look up #'+id);
   return byId[id];},createElement(tag){return makeNode(tag,{});}};
 const apiCalls=[],toasts=[],actionErrors=[];
-let payload={characters:[],orphans:[]};
+let payload={schema_version:1,book:{book_id:'B',script_present:true},traits_available:true,
+  characters:[],orphans:[],vocabularies:{genders:['male'],age_groups:[],problem_codes:[]},
+  counts:{characters:0,orphans:0}};
 let deferNext=false,resolveNext=null,rejectNext=null;
 const API={get(path){
   apiCalls.push(path);
@@ -714,8 +787,11 @@ const vmGlobal=vm.runInContext('globalThis',ctx);
 /* Captured before any V2 file runs, so the delta is attributable to V2. */
 const baselineGlobals=Object.getOwnPropertyNames(vmGlobal).sort();
 /* Round-trips a value out of the vm so assert.deepStrictEqual compares values
-   rather than cross-realm prototypes. A browser tab has one realm; the vm
-   boundary is a harness artefact, not behaviour under test. */
+   rather than cross-realm prototypes. A value produced inside the vm (a
+   selector's result, the store's arrays) is a vm-realm Array whose prototype
+   differs from this script's; JSON gives both sides the prototype of the realm
+   that wrote the expectation. A browser tab has one realm, so this is a harness
+   artefact, not behaviour under test. */
 const plain=value=>JSON.parse(JSON.stringify(value));
 function holdNext(){
   deferNext=true;

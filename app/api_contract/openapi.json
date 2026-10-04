@@ -3653,27 +3653,579 @@
         "title": "VoiceVersionRequest",
         "type": "object"
       },
-      "VoicesV2CharactersResponse": {
-        "description": "The Phase 0 envelope.\n\nPhase 1 fills both lists from the book projection (script roster joined to\n`voice_config.json`, plus `voice_config` keys that have no script line).\nThe names and shapes are declared here now so the OpenAPI contract and the\nfrontend binding are locked before any of that logic exists. Each row is\nintentionally untyped in Phase 0: a row schema would be a guess about data\nthat does not exist yet, and a wrong guess in a published contract is\nharder to change than a missing one.",
+      "VoicesV2AgeGroup": {
         "properties": {
-          "characters": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "VoicesV2AgeGroup",
+        "type": "object"
+      },
+      "VoicesV2Book": {
+        "properties": {
+          "book_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Id"
+          },
+          "script_present": {
+            "default": false,
+            "title": "Script Present",
+            "type": "boolean"
+          },
+          "script_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Script Sha256"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "title": "VoicesV2Book",
+        "type": "object"
+      },
+      "VoicesV2Character": {
+        "description": "One character. `key` is the stable selection identifier: derived from the\nstored name, never from a position in any list.",
+        "properties": {
+          "active_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Version"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "candidate_count": {
+            "default": 0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "generic": {
+            "default": false,
+            "title": "Generic",
+            "type": "boolean"
+          },
+          "identity_key": {
+            "title": "Identity Key",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "known_as": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Known As",
+            "type": "array"
+          },
+          "library_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Key"
+          },
+          "line_count": {
+            "default": 0,
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "persona_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Ref"
+          },
+          "persona_ref_resolves": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Ref Resolves"
+          },
+          "persona_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Status"
+          },
+          "possible_duplicate_of": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Possible Duplicate Of",
+            "type": "array"
+          },
+          "present_in_script": {
+            "title": "Present In Script",
+            "type": "boolean"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "states": {
             "items": {
               "additionalProperties": true,
               "type": "object"
+            },
+            "title": "States",
+            "type": "array"
+          },
+          "traits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoicesV2Traits"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "traits_available": {
+            "default": false,
+            "title": "Traits Available",
+            "type": "boolean"
+          },
+          "version_timeline": {
+            "items": {
+              "$ref": "#/components/schemas/VoicesV2VersionPoint"
+            },
+            "title": "Version Timeline",
+            "type": "array"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/VoicesV2Version"
+            },
+            "title": "Versions",
+            "type": "array"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/VoicesV2VoiceSummary"
+          },
+          "voice_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Status"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "identity_key",
+          "present_in_script",
+          "voice"
+        ],
+        "title": "VoicesV2Character",
+        "type": "object"
+      },
+      "VoicesV2CharactersResponse": {
+        "description": "The Phase 1 character projection for the active book.",
+        "properties": {
+          "aliases_registered": {
+            "default": false,
+            "title": "Aliases Registered",
+            "type": "boolean"
+          },
+          "book": {
+            "$ref": "#/components/schemas/VoicesV2Book"
+          },
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/VoicesV2Character"
             },
             "title": "Characters",
             "type": "array"
           },
+          "counts": {
+            "$ref": "#/components/schemas/VoicesV2Counts"
+          },
+          "major_line_threshold": {
+            "title": "Major Line Threshold",
+            "type": "integer"
+          },
           "orphans": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/VoicesV2Character"
             },
             "title": "Orphans",
             "type": "array"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "traits_available": {
+            "default": false,
+            "title": "Traits Available",
+            "type": "boolean"
+          },
+          "traits_requested": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traits Requested"
+          },
+          "vocabularies": {
+            "$ref": "#/components/schemas/VoicesV2Vocabularies"
           }
         },
+        "required": [
+          "major_line_threshold"
+        ],
         "title": "VoicesV2CharactersResponse",
+        "type": "object"
+      },
+      "VoicesV2Counts": {
+        "properties": {
+          "characters": {
+            "default": 0,
+            "title": "Characters",
+            "type": "integer"
+          },
+          "orphans": {
+            "default": 0,
+            "title": "Orphans",
+            "type": "integer"
+          }
+        },
+        "title": "VoicesV2Counts",
+        "type": "object"
+      },
+      "VoicesV2Traits": {
+        "description": "`speaker_traits.get_speaker_trait_summary` verbatim: the one definition of\na character's settled gender/age, including its state list.",
+        "properties": {
+          "age_group": {
+            "title": "Age Group",
+            "type": "string"
+          },
+          "ageless": {
+            "title": "Ageless",
+            "type": "boolean"
+          },
+          "current": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Current",
+            "type": "object"
+          },
+          "gender": {
+            "title": "Gender",
+            "type": "string"
+          },
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "states": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "States",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gender",
+          "age_group",
+          "ageless",
+          "lines",
+          "current"
+        ],
+        "title": "VoicesV2Traits",
+        "type": "object"
+      },
+      "VoicesV2Version": {
+        "description": "A voice version, projected. A stored version is a whole configuration,\nso the browser gets its category and label instead of the raw overlay.",
+        "properties": {
+          "adapter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Id"
+          },
+          "age_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Group"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "category",
+          "label"
+        ],
+        "title": "VoicesV2Version",
+        "type": "object"
+      },
+      "VoicesV2VersionPoint": {
+        "properties": {
+          "from_index": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Index"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "title": "VoicesV2VersionPoint",
+        "type": "object"
+      },
+      "VoicesV2Vocabularies": {
+        "description": "Enumerations come from `speaker_traits`, so the filter lists cannot drift\naway from the values the backend actually produces.",
+        "properties": {
+          "age_groups": {
+            "items": {
+              "$ref": "#/components/schemas/VoicesV2AgeGroup"
+            },
+            "title": "Age Groups",
+            "type": "array"
+          },
+          "genders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Genders",
+            "type": "array"
+          },
+          "problem_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problem Codes",
+            "type": "array"
+          }
+        },
+        "title": "VoicesV2Vocabularies",
+        "type": "object"
+      },
+      "VoicesV2VoiceSummary": {
+        "description": "What the browser needs to name a voice, and nothing it could write back.",
+        "properties": {
+          "adapter_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Available"
+          },
+          "adapter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Id"
+          },
+          "alias_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias Of"
+          },
+          "assigned": {
+            "title": "Assigned",
+            "type": "boolean"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "ensemble_members": {
+            "default": 0,
+            "title": "Ensemble Members",
+            "type": "integer"
+          },
+          "has_description": {
+            "title": "Has Description",
+            "type": "boolean"
+          },
+          "has_ref_audio": {
+            "title": "Has Ref Audio",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "ref_audio_present": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Audio Present"
+          },
+          "seed": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          }
+        },
+        "required": [
+          "category",
+          "label",
+          "assigned",
+          "has_ref_audio",
+          "has_description"
+        ],
+        "title": "VoicesV2VoiceSummary",
         "type": "object"
       }
     }
@@ -9694,7 +10246,7 @@
     },
     "/api/voices-v2/characters": {
       "get": {
-        "description": "Return the Voices V2 character projection for the active book.\n\nPhase 0: an empty, valid projection. Character browsing, filtering,\nsorting and voice assignment are Phase 1+ and are deliberately absent.",
+        "description": "Return the Voices V2 character projection for the active book.\n\nRead-only. Characters come from the active script; `orphans` are voice\nconfiguration entries with no script line, which the Voices tab cannot show\nbecause its roster is script-derived. Voice assignment, bulk actions and the\nVoice Library are later phases and are deliberately absent.",
         "operationId": "list_characters_api_voices_v2_characters_get",
         "responses": {
           "200": {

@@ -67,7 +67,10 @@ class FrontendJsSplitTests(unittest.TestCase):
         # tuple feeds _read_frontend_source(), the pre-split single-file view,
         # and folding V2 in would let V2 source satisfy assertions written
         # about the existing app.
-        expected = ("core.js", "state.js", "api.js", "lifecycle.js", "index.js")
+        expected = ("core.js", "state.js", "selectors.js", "api.js",
+                   "widgets/labels.js", "widgets/states.js",
+                   "panels/toolbar.js", "panels/characters.js", "panels/detail.js",
+                   "lifecycle.js", "index.js")
         html = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
         positions = []
         for name in expected:
