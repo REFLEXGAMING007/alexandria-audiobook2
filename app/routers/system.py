@@ -178,6 +178,20 @@ def get_config_local_profile(config: dict):
     return get_active_llm_config({**config, "llm_mode": "local"})
 
 
+def llm_endpoint_changed(incoming_base_url, saved_base_url):
+    """Whether an LLM profile's endpoint differs from the one on disk.
+
+    Two empty endpoints are the SAME endpoint: a profile with no remote URL is
+    not a change. Treating "no URL" as a change made every Setup save fail once
+    a profile held a placeholder key (e.g. "local") with an empty base_url -
+    the GET hands the browser the key sentinel, the browser posts it straight
+    back with nothing edited, and the save demanded a key for an endpoint the
+    user never touched. A real difference - a new URL, or clearing one that was
+    set - still requires an explicit key.
+    """
+    return get_api_key_endpoint(incoming_base_url) != get_api_key_endpoint(saved_base_url)
+
+
 def _restore_redacted_secrets(config: AppConfig, existing: dict) -> AppConfig:
     """Restore credentials represented by the GET sentinel on a save."""
     updates = {}
@@ -188,8 +202,8 @@ def _restore_redacted_secrets(config: AppConfig, existing: dict) -> AppConfig:
         if (incoming is not None
                 and getattr(incoming, "api_key", None) == _REDACTED_SECRET):
             saved = saved if isinstance(saved, dict) else {}
-            endpoint = get_api_key_endpoint(getattr(incoming, "base_url", None))
-            if not endpoint or endpoint != get_api_key_endpoint(saved.get("base_url")):
+            if llm_endpoint_changed(getattr(incoming, "base_url", None),
+                                    saved.get("base_url")):
                 raise HTTPException(status_code=400, detail=f"Enter an API key for the changed {section} endpoint, or clear the key field.")
             updates[section] = incoming.model_copy(update={"api_key": saved.get("api_key", "")})
     return config.model_copy(update=updates, deep=True) if updates else config
