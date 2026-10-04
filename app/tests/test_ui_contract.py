@@ -22,7 +22,7 @@ class UIContractTests(unittest.TestCase):
     def test_primary_navigation_is_keyboard_addressable(self):
         parser = _NavigationParser()
         parser.feed((STATIC / "index.html").read_text(encoding="utf-8"))
-        self.assertEqual(11, len(parser.tabs))
+        self.assertEqual(12, len(parser.tabs))
         self.assertTrue(all(tab.get("href", "").startswith("#") for tab in parser.tabs))
         self.assertEqual(1, sum(tab.get("aria-current") == "page" for tab in parser.tabs))
 

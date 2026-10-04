@@ -322,6 +322,7 @@ class ApiContractTests(unittest.TestCase):
             "system_router",
             "script_router",
             "voices_router",
+            "voices_v2_router",
             "editor_router",
             "scripts_library_router",
             "voice_library_router",

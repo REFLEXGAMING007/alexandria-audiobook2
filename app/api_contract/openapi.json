@@ -3652,6 +3652,29 @@
         ],
         "title": "VoiceVersionRequest",
         "type": "object"
+      },
+      "VoicesV2CharactersResponse": {
+        "description": "The Phase 0 envelope.\n\nPhase 1 fills both lists from the book projection (script roster joined to\n`voice_config.json`, plus `voice_config` keys that have no script line).\nThe names and shapes are declared here now so the OpenAPI contract and the\nfrontend binding are locked before any of that logic exists. Each row is\nintentionally untyped in Phase 0: a row schema would be a guess about data\nthat does not exist yet, and a wrong guess in a published contract is\nharder to change than a missing one.",
+        "properties": {
+          "characters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Characters",
+            "type": "array"
+          },
+          "orphans": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Orphans",
+            "type": "array"
+          }
+        },
+        "title": "VoicesV2CharactersResponse",
+        "type": "object"
       }
     }
   },
@@ -9667,6 +9690,25 @@
           }
         },
         "summary": "Get Voices"
+      }
+    },
+    "/api/voices-v2/characters": {
+      "get": {
+        "description": "Return the Voices V2 character projection for the active book.\n\nPhase 0: an empty, valid projection. Character browsing, filtering,\nsorting and voice assignment are Phase 1+ and are deliberately absent.",
+        "operationId": "list_characters_api_voices_v2_characters_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicesV2CharactersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Characters"
       }
     },
     "/api/voices/{speaker}/approval": {

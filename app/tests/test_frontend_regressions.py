@@ -56,6 +56,35 @@ class FrontendJsSplitTests(unittest.TestCase):
             self.assertNotIn(f'<script src="/static/js/{name}" async', html)
             self.assertNotIn(f'type="module" src="/static/js/{name}"', html)
 
+    def test_voices_v2_scripts_are_ordered_classic_scripts_between_core_and_reports(self):
+        # Voices V2 (app/static/js/voices-v2/) follows the same rules as the
+        # app-* files: plain <script src>, no defer/async/module, dependencies
+        # first and the bootstrap last. It also sits AFTER app-core.js (which
+        # owns API/escapeHtml/showToast) and BEFORE app-reports.js, because
+        # restoreTab() runs at the end of app-reports.js and may select the
+        # Voices V2 tab on load, which needs window.VoicesV2 to already exist.
+        # The V2 files are deliberately NOT added to _FRONTEND_JS_FILES: that
+        # tuple feeds _read_frontend_source(), the pre-split single-file view,
+        # and folding V2 in would let V2 source satisfy assertions written
+        # about the existing app.
+        expected = ("core.js", "state.js", "api.js", "lifecycle.js", "index.js")
+        html = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        positions = []
+        for name in expected:
+            path = _STATIC_DIR / "js" / "voices-v2" / name
+            self.assertTrue(path.is_file(), f"missing {path}")
+            self.assertGreater(path.stat().st_size, 0, f"{path} is empty")
+            tag = f'src="/static/js/voices-v2/{name}?v=__APP_BUILD__"'
+            self.assertIn(tag, html)
+            for banned in ("defer", "async", 'type="module"'):
+                self.assertNotIn(f'{banned} {tag}', html)
+                self.assertNotIn(f'{tag}" {banned}', html)
+            positions.append(html.index(tag))
+        self.assertEqual(sorted(positions), positions,
+                         "Voices V2 scripts must appear in dependency order, bootstrap last")
+        self.assertLess(html.index('src="/static/js/app-core.js'), positions[0])
+        self.assertLess(positions[-1], html.index('src="/static/js/app-reports.js'))
+
     def test_cross_file_forward_reference_lands_in_a_later_script_tag(self):
         # reattachRunningPollers (app-workbench.js, called at page-init time,
         # behind an awaited network fetch) calls pollVoicelab, which is defined

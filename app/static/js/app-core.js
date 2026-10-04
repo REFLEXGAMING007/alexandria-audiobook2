@@ -539,6 +539,11 @@
                 loadChunks();
             } else if (selectedLink.dataset.tab === 'voices') {
                 loadVoices(false);
+            } else if (selectedLink.dataset.tab === 'voicesv2') {
+                // Voices V2 is a standalone workspace. It owns its own state and
+                // lifecycle, so the only thing navigation owes it is the mount
+                // call; mount() is idempotent and re-reads on later visits.
+                VoicesV2.mount();
             } else if (selectedLink.dataset.tab === 'designer') {
                 loadDesignedVoices();
             } else if (selectedLink.dataset.tab === 'training') {

@@ -662,6 +662,24 @@
         html[data-theme="super-night"] .voice-card {
             border-left-color: #4a90d9;
         }
+
+        /* ── Voices V2 (begin) ─────────────────────────────────────────────
+           Every selector is scoped to #voicesv2-tab. A bare selector here
+           would reach the Voices tab and every other page, so there are none:
+           the workspace cannot style anything outside its own root, and the
+               existing UI cannot be restyled by work here.
+               Colours come from the shared token set so all four themes
+               (Light, Night, Super Night, Cyberpunk) stay readable without a
+               per-theme override block. */
+        #voicesv2-tab .vv2-card { border-left: 4px solid var(--accent); }
+        #voicesv2-tab .vv2-live { min-height: 1.25rem; }
+        #voicesv2-tab .vv2-status-region { min-height: 2.5rem; }
+        #voicesv2-tab .vv2-status-region:focus-visible, #voicesv2-tab .vv2-actions button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+        @media (max-width: 575.98px) {
+            #voicesv2-tab .card-body { padding: 0.85rem; }
+            #voicesv2-tab .vv2-actions { flex-wrap: wrap; }
+        }
+        /* ── Voices V2 (end) ─────────────────────────────────────────────── */
     </style>
     <script>
         /* Anti-flash: apply saved theme before first paint */
@@ -692,6 +710,7 @@
                     <li class="nav-item"><a href="#setup" class="nav-link nav-pipeline active" aria-current="page" data-tab="setup">1. Setup</a></li>
                     <li class="nav-item"><a href="#script" class="nav-link nav-pipeline" data-tab="script">2. Script</a></li>
                     <li class="nav-item"><a href="#voices" class="nav-link nav-pipeline" data-tab="voices">3. Voices</a></li>
+                    <li class="nav-item"><a href="#voicesv2" class="nav-link nav-pipeline" data-tab="voicesv2">Voices V2</a></li>
                     <li class="nav-item"><a href="#editor" class="nav-link nav-pipeline" data-tab="editor">4. Editor</a></li>
                     <li class="nav-item"><a href="#audio" class="nav-link nav-pipeline" data-tab="audio">5. Result</a></li>
                     <li class="nav-section-label nav-advanced-start" aria-hidden="true">Advanced</li>
@@ -1704,6 +1723,29 @@
                 <div class="card-header">Voice Parsing Logs</div>
                 <div class="card-body p-0">
                     <div id="voices-logs" class="log-window" style="height: 150px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Voices V2 Tab: a standalone voice-management workspace beside the
+             Voices tab, never inside it. Every element id below is V2-owned and
+             V2 is the only module that reads them. Nothing here is wired to the
+             Voices card list, the cast panel, or the Voices save path. -->
+        <div id="voicesv2-tab" class="tab-content" style="display:none;">
+            <div class="card mb-3 vv2-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="m-0"><i class="fas fa-layer-group me-2"></i>Voice Configuration (V2)</h4>
+                    <span class="small text-muted vv2-live" role="status" aria-live="polite" aria-atomic="true" data-voicesv2-region="live"></span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">A separate Voices V2 workspace. It reads the same book data as the Voices tab and shares none of its state, DOM, or save path, so work here cannot disturb voices you have already assigned there.</p>
+                    <div class="vv2-status-region" data-voicesv2-region="status">
+                        <div class="alert alert-info mb-0" role="status">Voices V2 &mdash; Phase 0 scaffold is ready. No voice features are enabled yet.</div>
+                    </div>
+                    <div class="d-flex align-items-center vv2-actions mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-voicesv2-action="reload">Reload projection</button>
+                        <span class="small text-muted" data-voicesv2-region="detail"></span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2851,6 +2893,15 @@
     <script src="/static/js/app-training.js?v=__APP_BUILD__"></script>
     <script src="/static/js/app-workbench.js?v=__APP_BUILD__"></script>
     <script src="/static/js/app-voicelab.js?v=__APP_BUILD__"></script>
+    <!-- Voices V2: ordered classic scripts, same rules as the app-* files. The
+         bootstrap (index.js) must come last. All five sit before app-reports.js
+         because restoreTab() runs at the end of that file and may select this
+         tab on load, which requires window.VoicesV2 to already exist. -->
+    <script src="/static/js/voices-v2/core.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/state.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/api.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/lifecycle.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/index.js?v=__APP_BUILD__"></script>
     <script src="/static/js/app-reports.js?v=__APP_BUILD__"></script>
 </body>
 </html>

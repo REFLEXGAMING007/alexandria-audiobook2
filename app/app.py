@@ -142,6 +142,14 @@ from routers.voices import router as voices_router
 
 app.include_router(voices_router)
 
+# Voices V2 is registered immediately after Voices and owns a separate
+# /api/voices-v2/* prefix, so no existing Voices route is shadowed or changed.
+# Keeping the two adjacent also makes the boundary obvious to a reader of this
+# file: everything after this point belongs to other pages.
+from routers.voices_v2 import router as voices_v2_router
+
+app.include_router(voices_v2_router)
+
 from routers.editor import router as editor_router
 
 app.include_router(editor_router)
