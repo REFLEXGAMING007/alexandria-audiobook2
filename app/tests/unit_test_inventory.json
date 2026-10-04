@@ -1658,7 +1658,8 @@
     "tests.test_config_numbers_js.ConfigNumericJsTests.test_integer_fields_preserve_exponent_and_decimal_notation"
   ],
   "test_config_refresh_feedback_js": [
-    "tests.test_config_refresh_feedback_js.ConfigRefreshFeedbackJsTests.test_acknowledged_save_refresh_failure_retry_and_editor_race"
+    "tests.test_config_refresh_feedback_js.ConfigRefreshFeedbackJsTests.test_acknowledged_save_refresh_failure_retry_and_editor_race",
+    "tests.test_config_refresh_feedback_js.ConfigRefreshFeedbackJsTests.test_confirmed_save_with_failed_ui_callback_and_rejected_save"
   ],
   "test_config_refresh_reuse_js": [
     "tests.test_config_refresh_reuse_js.ConfigRefreshReuseTests.test_actual_callback_success_and_independent_retry"
@@ -2907,7 +2908,8 @@
     "tests.test_front_matter_telemetry.FrontMatterTelemetryTests.test_front_only_removal_is_reported_without_modifying_upload"
   ],
   "test_frontend_cdn_integrity": [
-    "tests.test_frontend_cdn_integrity.FrontendCdnIntegrityTests.test_every_vendor_script_has_exact_version_sha384_and_cors"
+    "tests.test_frontend_cdn_integrity.FrontendCdnIntegrityTests.test_every_vendor_script_has_exact_version_sha384_and_cors",
+    "tests.test_frontend_cdn_integrity.FrontendCdnIntegrityTests.test_windows_style_checkout_preserves_vendor_script_integrity"
   ],
   "test_frontend_exposure": [
     "tests.test_frontend_exposure.CategoryTest.test_cjk_and_accented_latin_are_separated",
