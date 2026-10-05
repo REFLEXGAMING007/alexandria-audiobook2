@@ -242,6 +242,12 @@
             previewCapable: boolOr(entry.preview_capable, false),
             previewUrl: typeof entry.preview_url === 'string' ? entry.preview_url : null,
             previewKind: typeof entry.preview_kind === 'string' ? entry.preview_kind : null,
+            // Generated-preview state, kept apart from `available`: a voice with
+            // no preview yet is still perfectly assignable.
+            previewState: text(entry.preview_state) || 'none',
+            previewGeneratable: boolOr(entry.preview_generatable, false),
+            previewJobId: typeof entry.preview_job_id === 'string'
+                ? entry.preview_job_id : null,
             tags: arrayOf(entry.tags).filter(function (tag) {
                 return typeof tag === 'string' && tag.trim();
             }),
@@ -589,10 +595,39 @@
         return state.catalogue;
     }
 
+    /* ── Preview jobs ───────────────────────────────────────────────────
+     * A job arrives in the same wire shape as everything else, so it is
+     * converted here rather than by the module that fetched it. Keeping every
+     * snake_case→camelCase conversion in this file is what stops a panel from
+     * ever having to know which side of the boundary it is on.
+     */
+    function adaptPreviewJob(raw) {
+        var source = (raw && typeof raw === 'object') ? raw : {};
+        return {
+            jobId: text(source.job_id),
+            voiceId: typeof source.voice_id === 'string' ? source.voice_id : null,
+            name: typeof source.name === 'string' ? source.name : null,
+            kind: typeof source.kind === 'string' ? source.kind : null,
+            profile: typeof source.profile === 'string' ? source.profile : null,
+            status: text(source.status) || 'unknown',
+            progress: numberOrNull(source.progress) || 0,
+            terminal: boolOr(source.terminal, false),
+            deduplicated: boolOr(source.deduplicated, false),
+            createdAt: numberOrNull(source.created_at),
+            startedAt: numberOrNull(source.started_at),
+            completedAt: numberOrNull(source.completed_at),
+            previewUrl: typeof source.preview_url === 'string' ? source.preview_url : null,
+            error: typeof source.error === 'string' ? source.error : null,
+            errorCode: typeof source.error_code === 'string' ? source.error_code : null,
+            cached: boolOr(source.cached, false)
+        };
+    }
+
     namespace.selectors = {
         adaptProjection: adaptProjection,
         adaptCharacter: adaptCharacter,
         adaptCatalogue: adaptCatalogue,
+        adaptPreviewJob: adaptPreviewJob,
         currentVoiceId: currentVoiceId,
         selectDraft: selectDraft,
         selectPendingCommand: selectPendingCommand,

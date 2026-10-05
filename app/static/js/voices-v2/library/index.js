@@ -77,6 +77,7 @@
         filters: namespace.libraryFilters,
         panel: panel,
         audio: namespace.libraryAudio,
+        previews: namespace.libraryPreviews,
         cards: namespace.libraryCards,
         root: core.ROOT_ID
     };

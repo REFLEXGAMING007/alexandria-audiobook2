@@ -315,7 +315,30 @@ class NormalisationTests(CatalogueFixture):
         row = self.voices_by_id()[design]
         self.assertTrue(row["preview_capable"])
         self.assertEqual("/designed_voices/narrator_1_preview.wav", row["preview_url"])
-        self.assertEqual("recording", row["preview_kind"])
+        # Phase 3 called every preview a recording. The Voice Designer synthesised
+        # this one, and saying otherwise would hide the distinction the library
+        # needs to decide what can be regenerated.
+        self.assertEqual("generated", row["preview_kind"])
+
+    def test_preview_kind_distinguishes_a_recording_from_a_render(self):
+        """A clone's audio was recorded by whoever uploaded it; an adapter's
+        `preview_sample.wav` and a Designer's preview were both synthesised."""
+        clone = self.seed_clone()
+        lora = self.seed_lora()
+        with_preview = self.seed_lora(adapter_id="rendered")
+        os.makedirs(os.path.join(self.tmp, "lora_models", "rendered"), exist_ok=True)
+        self.write_file("lora_models/rendered/preview_sample.wav")
+
+        rows = self.voices_by_id()
+
+        self.assertEqual("recorded", rows[clone]["preview_kind"])
+        # No cached preview means no kind at all - claiming one would imply audio
+        # exists that does not.
+        self.assertIsNone(rows[lora]["preview_kind"])
+        self.assertFalse(rows[lora]["preview_capable"],
+                         "an adapter with no cached preview says so")
+        self.assertTrue(rows[with_preview]["preview_capable"])
+        self.assertEqual("generated", rows[with_preview]["preview_kind"])
 
     def test_a_voice_whose_recording_is_missing_reports_no_preview(self):
         design = self.seed_design(with_preview=False)

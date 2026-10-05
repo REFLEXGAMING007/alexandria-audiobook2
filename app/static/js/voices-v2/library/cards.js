@@ -18,6 +18,7 @@
     'use strict';
 
     var core = namespace.core;
+    var state = namespace.state;
 
     var PROVENANCE_LABELS = { declared: 'declared', inferred: 'inferred',
         unknown: 'unknown' };
@@ -61,22 +62,77 @@
             + ' Favourite</button>';
     }
 
+    /* Phase 3 had one static button here. It now delegates to previewControl,
+     * which is the single place that decides between Play, Generate and Retry
+     * from the same state - so a card can never offer a control the data cannot
+     * back, and a generated preview appears in exactly the same control a
+     * recorded one did. */
     function previewButton(voice) {
-        if (!voice.previewCapable) {
-            /* No preview available is a fact about the data, so it is stated
-             * once per card rather than shown as a control that cannot work. */
-            return '<span class="small vv2-muted">No preview recorded</span>';
-        }
+        return previewControl(voice);
+    }
+
+    /* The preview control, which is never a dead button.
+ *
+ * Four states, each with its own action:
+ *   nothing yet   Generate Preview, enabled when the voice can be generated
+ *   queued/running a disabled control plus the live status, so a second click
+ *                 cannot become a second render
+ *   ready         Play, or Stop while this voice is the one playing
+ *   failed        Retry, with the server's own message
+ *
+ * The status line is plain text rather than a spinner so the state is readable
+ * without colour or motion.
+ */
+    function previewControl(voice) {
+        var previews = namespace.libraryPreviews;
+        var generating = previews.isGenerating(voice);
+        var label = previews.previewLabel(voice);
+        var detail = previews.previewDetail(voice);
         var playing = namespace.libraryAudio.isPlaying(voice.voiceId);
         var loading = namespace.libraryAudio.isLoading(voice.voiceId);
-        var label = loading ? 'Loading preview' : (playing ? 'Stop preview' : 'Play preview');
-        return '<button type="button" class="btn btn-sm btn-outline-secondary"'
-            + ' data-voicesv2-action="preview-voice"'
-            + ' data-voicesv2-voice="' + core.escape(voice.voiceId) + '"'
-            + ' aria-pressed="' + (playing ? 'true' : 'false') + '"'
-            + (loading ? ' disabled' : '') + '>'
-            + core.escape(loading ? 'Loading\u2026' : (playing ? 'Stop' : 'Preview'))
-            + '<span class="vv2-sr-only"> ' + core.escape(label) + '</span></button>';
+        var status = '<p class="vv2-preview-state vv2-preview-' + core.escape(
+            generating ? 'generating' : (label === 'Preview failed' ? 'failed' : 'idle')
+        ) + '" role="status">'
+            + '<span class="vv2-preview-label">' + core.escape(label) + '</span>'
+            + (detail ? ' <span class="vv2-muted">&mdash; ' + core.escape(detail) + '</span>' : '')
+            + '</p>';
+
+        var control;
+        if (generating) {
+            control = '<button type="button" class="btn btn-sm btn-outline-secondary"'
+                + ' data-voicesv2-action="cancel-preview"'
+                + ' data-voicesv2-voice="' + core.escape(voice.voiceId) + '"'
+                + ' data-voicesv2-job="' + core.escape(voiceJobId(voice)) + '"'
+                + '>Cancel</button>';
+        } else if (label === 'Preview failed' && previews.canRetry(voice)) {
+            control = '<button type="button" class="btn btn-sm btn-outline-danger"'
+                + ' data-voicesv2-action="generate-preview"'
+                + ' data-voicesv2-voice="' + core.escape(voice.voiceId) + '">Retry</button>';
+        } else if (previews.canPlay(voice)) {
+            control = '<button type="button" class="btn btn-sm btn-outline-secondary"'
+                + ' data-voicesv2-action="play-preview"'
+                + ' data-voicesv2-voice="' + core.escape(voice.voiceId) + '"'
+                + ' aria-pressed="' + (playing ? 'true' : 'false') + '"'
+                + (loading ? ' disabled' : '') + '>'
+                + core.escape(loading ? 'Loading\u2026' : (playing ? 'Stop' : 'Play'))
+                + '</button>';
+        } else if (voice.previewGeneratable && voice.available) {
+            control = '<button type="button" class="btn btn-sm btn-outline-primary"'
+                + ' data-voicesv2-action="generate-preview"'
+                + ' data-voicesv2-voice="' + core.escape(voice.voiceId) + '">'
+                + 'Generate Preview</button>';
+        } else {
+            /* Nothing to offer, and the status line has already said why. */
+            control = '';
+        }
+
+        return '<div class="vv2-voice-preview">' + status
+            + '<div class="vv2-voice-actions">' + control + '</div></div>';
+    }
+
+    function voiceJobId(voice) {
+        var job = namespace.libraryPreviews.effectiveJob(state.getState(), voice);
+        return job && job.jobId ? job.jobId : '';
     }
 
     function card(voice, options) {
@@ -116,9 +172,9 @@
             + ' data-voicesv2-voice="' + core.escape(voice.voiceId) + '"'
             + (voice.available ? '' : ' disabled')
             + '>' + core.escape(selected ? 'Chosen' : 'Choose') + '</button>'
-            + previewButton(voice)
             + favouriteButton(voice)
             + '</div>'
+            + previewControl(voice)
             + '</div>'
             + '</li>';
     }

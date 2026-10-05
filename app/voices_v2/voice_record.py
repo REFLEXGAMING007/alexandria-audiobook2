@@ -61,10 +61,12 @@ KIND_REALISATIONS = {
 #: Saying so is better than showing a star that silently does nothing.
 FAVORITE_CAPABLE_KINDS = ("lora", "builtin_lora")
 
-#: Phase 3 previews are recordings that already exist on disk and are served by
-#: the static mounts the application already has. Generated previews (LoRA test,
-#: Voice Designer) need a GPU claim and belong to a later phase.
-PREVIEW_KIND_RECORDING = "recording"
+#: Whether a preview is something a human recorded or something the engine
+#: synthesised. Phase 3 reported both as "recording", which hid the distinction
+#: the library needs: an adapter's `preview_sample.wav` is generated, and a
+#: clone's upload is not.
+PREVIEW_KIND_RECORDED = "recorded"
+PREVIEW_KIND_GENERATED = "generated"
 
 
 def text(value) -> Optional[str]:
@@ -149,7 +151,8 @@ def voice_record(*, voice_id: str, native_id: str, kind: str, name: str,
                  available: bool, unavailable_reason: str, downloaded: bool,
                  favorite: bool, adapter_id: Optional[str], adapter_path: Optional[str],
                  ref_audio: Optional[str], ref_text: Optional[str],
-                 preview_url: Optional[str], metadata: Optional[Dict[str, Any]] = None
+                 preview_url: Optional[str], preview_kind: Optional[str] = None,
+                 metadata: Optional[Dict[str, Any]] = None
                  ) -> Dict[str, Any]:
     """One catalogue row, in the shape the library consumes.
 
@@ -197,10 +200,11 @@ def voice_record(*, voice_id: str, native_id: str, kind: str, name: str,
         # Clone and design families only.
         "ref_audio": ref_audio,
         "ref_text": ref_text,
-        # Phase 3 plays recordings that already exist; nothing is generated here.
+        # Recordings are served by a static mount; generated previews are cached
+        # next to the adapter. Either way the browser only ever gets a URL.
         "preview_capable": bool(preview_url),
         "preview_url": preview_url,
-        "preview_kind": PREVIEW_KIND_RECORDING if preview_url else None,
+        "preview_kind": preview_kind if preview_url else None,
         # Reserved for a later tagging phase. Empty is honest: no source here
         # publishes tags, and an inferred tag must not be presented as one.
         "tags": [],

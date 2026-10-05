@@ -44,7 +44,8 @@ V2_FILES = (
     "core.js", "state.js", "selectors.js", "api.js",
     "widgets/labels.js", "widgets/states.js",
     "panels/toolbar.js", "panels/characters.js", "panels/detail.js", "panels/assignment.js",
-    "library/filters.js", "library/audio.js", "library/cards.js", "library/panel.js",
+    "library/filters.js", "library/audio.js", "library/previews.js",
+    "library/cards.js", "library/panel.js",
     "library/index.js",
     "lifecycle.js", "index.js",
 )
@@ -248,11 +249,12 @@ assert.deepStrictEqual(Object.keys(ns).sort(),['NAMESPACE','ROOT_DIR','api','can
   'mount','notify','notifyFailure','panels','phase','refresh','root','select','selectors',
   'selectedCharacter','state','states','subscribe','unmount','visibleCharacters','voiceDraft',
   'voiceSaveState']);
-assert.strictEqual(ns.phase,3);
+assert.strictEqual(ns.phase,4);
 assert.strictEqual(ns.root,'voicesv2-tab');
 assert.strictEqual(ns.core.ROOT_ID,'voicesv2-tab');
 assert(Object.isFrozen(ns.api),'the API boundary must not be rewritable');
-assert.deepStrictEqual(Object.keys(ns.api.PATHS),['characters','favorite','voices','command']);
+assert.deepStrictEqual(Object.keys(ns.api.PATHS),
+  ['characters','favorite','voices','command','previews']);
 for(const name of ['mount','refresh','unmount','isMounted','select','subscribe','dispatch',
   'visibleCharacters','characterSummary','selectedCharacter','voiceDraft','canSaveVoice',
   'voiceSaveState','libraryVoices','librarySummary']){
@@ -459,7 +461,8 @@ assert.deepStrictEqual(Object.keys(state.selection).sort(),['blocked','key','pen
 assert.deepStrictEqual(Object.keys(state.draft).sort(),
   ['characterKey','cleared','dirty','voiceId']);
 assert.deepStrictEqual(Object.keys(state.save).sort(),['code','message','savedAt','state']);
-assert.deepStrictEqual(Object.keys(state.preview).sort(),['error','state','voiceId']);
+assert.deepStrictEqual(Object.keys(state.preview).sort(),
+  ['activeJob','jobs','playback','polling']);
 assert.deepStrictEqual(Object.keys(state.libraryContext).sort(),
   ['ageGroup','ageless','gender','key','name']);
 const walk=value=>{if(!value||typeof value!=='object')return;
@@ -663,7 +666,11 @@ class RouterIsolationTests(unittest.TestCase):
         self.assertEqual({("GET", "/api/voices-v2/characters"),
                           ("GET", "/api/voices-v2/voices"),
                           ("POST", "/api/voices-v2/favorite"),
-                          ("POST", "/api/voices-v2/command")}, self._routes(self.v2))
+                          ("POST", "/api/voices-v2/command"),
+                          ("POST", "/api/voices-v2/previews"),
+                          ("GET", "/api/voices-v2/previews/{job_id}"),
+                          ("POST", "/api/voices-v2/previews/{job_id}/cancel")},
+                         self._routes(self.v2))
 
     def test_v2_adds_no_route_to_any_existing_router(self):
         app = self.FastAPI()

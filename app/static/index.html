@@ -737,6 +737,11 @@
         #voicesv2-tab .vv2-voice-actions :is(button) { min-height: 2rem; }
         #voicesv2-tab .vv2-provenance { color: var(--text-muted); }
         #voicesv2-tab .vv2-library-state { margin: 0; }
+        #voicesv2-tab .vv2-voice-preview { display: grid; gap: 0.3rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--border-color); }
+        #voicesv2-tab .vv2-preview-state { margin: 0; font-size: 0.8125rem; }
+        #voicesv2-tab .vv2-preview-label { font-weight: 600; }
+        #voicesv2-tab .vv2-preview-generating .vv2-preview-label { text-decoration: underline; text-underline-offset: 2px; }
+        #voicesv2-tab .vv2-preview-failed .vv2-preview-label { text-decoration: underline; text-underline-offset: 2px; }
         #voicesv2-tab .vv2-detail-title { font-size: 0.9375rem; margin-bottom: 0.5rem; }
         #voicesv2-tab .vv2-fields { display: grid; gap: 0.35rem; margin: 0; }
         #voicesv2-tab .vv2-field { display: grid; gap: 0.1rem; grid-template-columns: minmax(0, 1fr); }
@@ -757,9 +762,12 @@
             #voicesv2-tab .vv2-list-region { max-height: none; }
             #voicesv2-tab .vv2-row { padding: 0.7rem 0.6rem; }
             /* Save, Clear and Discard stack rather than squeeze into three
-             * unreadable columns on a phone. */
+             * unreadable columns on a phone. Preview controls sit in their own
+             * row above them, so a card never becomes five tiny buttons. */
             #voicesv2-tab .vv2-save-actions { flex-direction: column; align-items: stretch; }
             #voicesv2-tab .vv2-save-actions :is(button) { width: 100%; margin-right: 0; }
+            #voicesv2-tab .vv2-voice-actions { flex-direction: column; align-items: stretch; }
+            #voicesv2-tab .vv2-voice-actions :is(button) { width: 100%; margin-right: 0; }
         }
         @media (min-width: 992px) {
             #voicesv2-tab .vv2-workspace { align-items: start; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); }
@@ -3121,6 +3129,7 @@
     <script src="/static/js/voices-v2/panels/assignment.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/library/filters.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/library/audio.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/library/previews.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/library/cards.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/library/panel.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/library/index.js?v=__APP_BUILD__"></script>

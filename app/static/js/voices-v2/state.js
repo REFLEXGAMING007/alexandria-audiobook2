@@ -67,7 +67,7 @@
              * through voices never looks like an edit. */
             librarySelection: { cursor: null },
             /* One preview at a time, owned by library/audio.js. */
-            preview: { voiceId: null, state: 'idle', error: null },
+            preview: createInitialPreview(),
             /* The one unsaved voice edit. Phase 2 is single-character, so there is
              * deliberately one draft and not a map of them; `dirty` is the only
              * thing that makes it worth protecting. */
@@ -116,6 +116,21 @@
 
     /* The library is open over the whole catalogue until a character gives it a
      * subject. */
+    function createInitialPreview() {
+        return {
+            /* The server's job board, kept as data so a poll result can be
+             * compared and rendered without any object being shared with the
+             * audio element. */
+            jobs: {},
+            activeJob: null,
+            polling: false,
+            /* Playback, owned by library/audio.js and deliberately separate from
+             * the job board: a voice can be playing a recording it had before any
+             * job existed, and a finished job does not mean audio stopped. */
+            playback: { voiceId: null, state: 'idle', error: null }
+        };
+    }
+
     function createInitialLibrary() {
         return { open: false };
     }
@@ -360,6 +375,55 @@
             case 'save/reset':
                 state.save = createInitialSave();
                 return 'save';
+            case 'preview/playback':
+                /* Playback is not job state: a voice can play a recording it had
+                 * before any job existed, and a finished job does not mean the
+                 * audio stopped. */
+                state.preview.playback = {
+                    voiceId: command.voiceId === undefined ? null : command.voiceId,
+                    state: command.state,
+                    error: command.error === undefined || command.error === null
+                        ? null : String(command.error)
+                };
+                return 'preview';
+            case 'preview/start':
+                state.preview.activeJob = command.jobId;
+                state.preview.polling = true;
+                return 'preview';
+            case 'preview/attach':
+            case 'preview/progress':
+                if (!command.job || typeof command.job.jobId !== 'string') {
+                    throw new TypeError('A Voices V2 preview command needs a job with a jobId.');
+                }
+                /* A job that arrived from a poll, a duplicate click or a retry
+                 * joins the board rather than replacing it. The board is copied
+                 * so a panel holding the old reference cannot mutate state. */
+                var jobs = {};
+                jobs[command.job.jobId] = command.job;
+                state.preview.jobs = Object.assign({}, state.preview.jobs, jobs);
+                if (state.preview.activeJob === null) {
+                    state.preview.activeJob = command.job.jobId;
+                }
+                return 'preview';
+            case 'preview/finish':
+                if (command.job) {
+                    var finished = {};
+                    finished[command.job.jobId] = command.job;
+                    state.preview.jobs = Object.assign({}, state.preview.jobs, finished);
+                }
+                if (state.preview.activeJob === command.jobId) {
+                    state.preview.activeJob = null;
+                }
+                state.preview.polling = false;
+                return 'preview';
+            case 'preview/clearJobs':
+                /* Called when the catalogue is reloaded: the board describes the
+                 * last snapshot, and a fresh one supersedes it. */
+                state.preview = createInitialPreview();
+                return 'preview';
+            case 'preview/stopPolling':
+                state.preview.polling = false;
+                return 'preview';
             case 'filters/patch':
                 return reduceFilterPatch(command);
             case 'library/open':

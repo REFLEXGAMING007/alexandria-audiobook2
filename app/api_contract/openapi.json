@@ -4138,6 +4138,180 @@
         "title": "VoicesV2FavoriteResponse",
         "type": "object"
       },
+      "VoicesV2PreviewJob": {
+        "description": "A preview job, as the browser may see it.\n\nNo native id, no filesystem path, no fingerprint internals: a client cannot\nlearn anything here that it did not already get from the catalogue.",
+        "properties": {
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
+          },
+          "cached": {
+            "default": false,
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "deduplicated": {
+            "default": false,
+            "title": "Deduplicated",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "progress": {
+            "default": 0.0,
+            "title": "Progress",
+            "type": "number"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "terminal": {
+            "default": false,
+            "title": "Terminal",
+            "type": "boolean"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "voice_id",
+          "status"
+        ],
+        "title": "VoicesV2PreviewJob",
+        "type": "object"
+      },
+      "VoicesV2PreviewRequest": {
+        "description": "A request to render one preview.\n\nDeliberately small: a voice and a profile. No TTS configuration, no output\npath, no text - the browser states an intention and the backend resolves\neverything else from the catalogue.",
+        "properties": {
+          "profile": {
+            "default": "standard",
+            "title": "Profile",
+            "type": "string"
+          },
+          "voice_id": {
+            "minLength": 1,
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id"
+        ],
+        "title": "VoicesV2PreviewRequest",
+        "type": "object"
+      },
       "VoicesV2Traits": {
         "description": "`speaker_traits.get_speaker_trait_summary` verbatim: the one definition of\na character's settled gender/age, including its state list.",
         "properties": {
@@ -4298,11 +4472,25 @@
             "title": "Favorite Kinds",
             "type": "array"
           },
+          "generated_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Generated Kinds",
+            "type": "array"
+          },
           "kinds": {
             "items": {
               "type": "string"
             },
             "title": "Kinds",
+            "type": "array"
+          },
+          "preview_profiles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Preview Profiles",
             "type": "array"
           },
           "schema_version": {
@@ -4463,6 +4651,22 @@
             "title": "Preview Capable",
             "type": "boolean"
           },
+          "preview_generatable": {
+            "default": false,
+            "title": "Preview Generatable",
+            "type": "boolean"
+          },
+          "preview_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Job Id"
+          },
           "preview_kind": {
             "anyOf": [
               {
@@ -4473,6 +4677,11 @@
               }
             ],
             "title": "Preview Kind"
+          },
+          "preview_state": {
+            "default": "none",
+            "title": "Preview State",
+            "type": "string"
           },
           "preview_url": {
             "anyOf": [
@@ -10780,6 +10989,125 @@
           }
         },
         "summary": "Set Favorite"
+      }
+    },
+    "/api/voices-v2/previews": {
+      "post": {
+        "description": "Queue one generated preview and return immediately.\n\nThree rapid clicks produce one render: an identical queued or running job is\nreturned instead of a second, and a completed job whose audio is still on\ndisk is returned as a cache hit. The request never blocks on synthesis.",
+        "operationId": "create_preview_api_voices_v2_previews_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoicesV2PreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicesV2PreviewJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Preview"
+      }
+    },
+    "/api/voices-v2/previews/{job_id}": {
+      "get": {
+        "description": "The status of one preview job.",
+        "operationId": "read_preview_api_voices_v2_previews__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicesV2PreviewJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Preview"
+      }
+    },
+    "/api/voices-v2/previews/{job_id}/cancel": {
+      "post": {
+        "description": "Cancel a queued preview.\n\nA running synthesis is not cancellable. The primitive owns the GPU claim and\nthe engine call, and stopping it mid-render would release a claim its worker\nstill holds; the caller is told so instead.",
+        "operationId": "cancel_preview_api_voices_v2_previews__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicesV2PreviewJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Preview"
       }
     },
     "/api/voices-v2/voices": {

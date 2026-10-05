@@ -71,8 +71,8 @@ class FrontendJsSplitTests(unittest.TestCase):
                     "widgets/labels.js", "widgets/states.js",
                     "panels/toolbar.js", "panels/characters.js", "panels/detail.js",
                     "panels/assignment.js",
-                    "library/filters.js", "library/audio.js", "library/cards.js",
-                    "library/panel.js", "library/index.js",
+                    "library/filters.js", "library/audio.js", "library/previews.js",
+                    "library/cards.js", "library/panel.js", "library/index.js",
                     "lifecycle.js", "index.js")
         html = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
         positions = []

@@ -20,7 +20,8 @@
         characters: '/api/voices-v2/characters',
         voices: '/api/voices-v2/voices',
         favorite: '/api/voices-v2/favorite',
-        command: '/api/voices-v2/command'
+        command: '/api/voices-v2/command',
+        previews: '/api/voices-v2/previews'
     });
 
     /* Refusal codes the backend can return. They are stable, so a panel can pick
@@ -33,6 +34,13 @@
         VOICE_UNAVAILABLE: 'voice_unavailable',
         FAVORITE_UNSUPPORTED: 'favorite_unsupported',
         FAVORITE_UNRESOLVED: 'favorite_unresolved',
+        UNKNOWN_JOB: 'unknown_job',
+        JOB_RUNNING: 'job_running',
+        UNKNOWN_PROFILE: 'unknown_profile',
+        PREVIEW_NOT_GENERATED: 'preview_not_generated',
+        BUSY: 'busy',
+        INVALID_AUDIO: 'invalid_audio',
+        FILE_MISSING: 'file_missing',
         UNKNOWN_CHARACTER: 'unknown_character',
         AMBIGUOUS_CHARACTER: 'ambiguous_character',
         CHARACTER_GONE: 'character_no_longer_present',
@@ -72,6 +80,28 @@
         return API.post(PATHS.favorite, { voice_id: voiceId, favorite: favorite });
     }
 
+    /* Generated previews.
+     *
+     * `createPreview` sends a voice and a profile and nothing else: the backend
+     * resolves the identity and every generation parameter from the catalogue,
+     * so a browser cannot describe a TTS configuration or a path. It returns as
+     * soon as the job is queued, and the caller watches it through `readPreview`.
+     */
+    function createPreview(voiceId, profile) {
+        return API.post(PATHS.previews, {
+            voice_id: voiceId,
+            profile: profile || 'standard'
+        });
+    }
+
+    function readPreview(jobId) {
+        return API.get(PATHS.previews + '/' + encodeURIComponent(jobId));
+    }
+
+    function cancelPreview(jobId) {
+        return API.post(PATHS.previews + '/' + encodeURIComponent(jobId) + '/cancel', {});
+    }
+
     function sendCommand(command) {
         return API.post(PATHS.command, {
             command: command.command,
@@ -109,6 +139,9 @@
         fetchCharacters: fetchCharacters,
         fetchVoices: fetchVoices,
         setFavorite: setFavorite,
+        createPreview: createPreview,
+        readPreview: readPreview,
+        cancelPreview: cancelPreview,
         sendCommand: sendCommand,
         refusalCode: refusalCode,
         refusalMessage: refusalMessage

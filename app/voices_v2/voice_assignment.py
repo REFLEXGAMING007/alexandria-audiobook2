@@ -65,7 +65,8 @@ from routers.lora import get_lora_adapter_location_locked
 
 from voices_v2.character_projection import build_character_projection
 from voices_v2 import SCHEMA_VERSION
-from voices_v2.voice_record import (FAVORITE_CAPABLE_KINDS, clone_and_design_preview_url,
+from voices_v2.voice_record import (FAVORITE_CAPABLE_KINDS, PREVIEW_KIND_GENERATED,
+                                   PREVIEW_KIND_RECORDED, clone_and_design_preview_url,
                                    declared_age_group, declared_gender, stated_added_at,
                                    voice_record)
 
@@ -207,6 +208,7 @@ def _builtin_lora_rows() -> List[Dict[str, Any]]:
             ref_audio=None,
             ref_text=None,
             preview_url=_adapter_preview_url(adapter_id, True),
+            preview_kind=PREVIEW_KIND_GENERATED,
             metadata={"epochs": entry.get("epochs"), "sample_count": entry.get("sample_count")},
         ))
     return rows
@@ -261,6 +263,7 @@ def _lora_rows() -> Tuple[List[Dict[str, Any]], List[str]]:
             ref_audio=None,
             ref_text=None,
             preview_url=_adapter_preview_url(adapter_id, False),
+            preview_kind=PREVIEW_KIND_GENERATED,
             metadata={
                 "epochs": entry.get("epochs"),
                 "sample_count": entry.get("sample_count"),
@@ -312,6 +315,7 @@ def _clone_rows() -> List[Dict[str, Any]]:
             ref_audio=relative,
             ref_text=transcript,
             preview_url=clone_and_design_preview_url("clone_voices", filename, CLONE_VOICES_DIR),
+            preview_kind=PREVIEW_KIND_RECORDED,
             metadata={
                 "source_title": _text(entry.get("source_title")),
                 "rights_confirmed": entry.get("rights_confirmed"),
@@ -357,6 +361,7 @@ def _design_rows() -> List[Dict[str, Any]]:
             ref_text=_text(entry.get("sample_text")),
             preview_url=clone_and_design_preview_url(
                 "designed_voices", filename, DESIGNED_VOICES_DIR),
+            preview_kind=PREVIEW_KIND_GENERATED,
             metadata={},
         ))
     return rows

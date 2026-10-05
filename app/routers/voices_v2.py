@@ -35,6 +35,10 @@ from pydantic import BaseModel, Field
 from voice_config_store import VoiceConfigConflict
 from voices_v2 import SCHEMA_VERSION
 from voices_v2.character_projection import build_character_projection
+from voices_v2.preview_jobs import (GENERATED_KINDS, PREVIEW_PROFILES, PROFILE_STANDARD,
+                                    PreviewError, cancel_job, describe_preview, get_job,
+                                    latest_job_for_voice, public_job, recover_jobs,
+                                    request_preview)
 from voices_v2.voice_assignment import (VoiceCommandError, build_voice_catalogue,
                                         execute_voice_command, plan_voice_command,
                                         set_voice_favorite)
@@ -198,6 +202,11 @@ class VoicesV2VoiceOption(BaseModel):
     preview_capable: bool = False
     preview_url: Optional[str] = None
     preview_kind: Optional[str] = None
+    # Generated-preview state, distinct from `availability`: a voice can be
+    # perfectly assignable and still have no preview rendered yet.
+    preview_state: str = "none"
+    preview_generatable: bool = False
+    preview_job_id: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -239,6 +248,48 @@ class VoicesV2VoiceCatalogue(BaseModel):
     favorite_kinds: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
     unsupported_kinds: Dict[str, str] = Field(default_factory=dict)
+    # Preview generation vocabulary, so the browser never hard-codes a profile or
+    # a family that can be generated.
+    preview_profiles: List[str] = Field(default_factory=list)
+    generated_kinds: List[str] = Field(default_factory=list)
+
+
+class VoicesV2PreviewRequest(BaseModel):
+    """A request to render one preview.
+
+    Deliberately small: a voice and a profile. No TTS configuration, no output
+    path, no text - the browser states an intention and the backend resolves
+    everything else from the catalogue.
+    """
+
+    voice_id: str = Field(min_length=1)
+    profile: str = PROFILE_STANDARD
+
+
+class VoicesV2PreviewJob(BaseModel):
+    """A preview job, as the browser may see it.
+
+    No native id, no filesystem path, no fingerprint internals: a client cannot
+    learn anything here that it did not already get from the catalogue.
+    """
+
+    job_id: str
+    voice_id: str
+    name: Optional[str] = None
+    kind: Optional[str] = None
+    profile: Optional[str] = None
+    status: str
+    progress: float = 0.0
+    terminal: bool = False
+    deduplicated: bool = False
+    created_at: Optional[float] = None
+    started_at: Optional[float] = None
+    completed_at: Optional[float] = None
+    preview_url: Optional[str] = None
+    audio_url: Optional[str] = None
+    error: Optional[str] = None
+    error_code: Optional[str] = None
+    cached: bool = False
 
 
 class VoicesV2CommandRequest(BaseModel):
@@ -314,8 +365,67 @@ async def list_assignable_voices():
     be offered a selector that silently omits their current voice.
     """
     try:
-        return await asyncio.to_thread(build_voice_catalogue)
+        return await asyncio.to_thread(_catalogue_with_previews)
     except VoiceCommandError as error:
+        raise HTTPException(status_code=error.status,
+                            detail={"code": error.code, "message": error.message}) from error
+
+
+def _catalogue_with_previews():
+    """The catalogue plus generated-preview state.
+
+    Enrichment lives here rather than inside `build_voice_catalogue` so the job
+    store and the catalogue do not import each other. Preview state is joined per
+    voice after the catalogue is built, which keeps one lock over the job store
+    for the whole read instead of one per record.
+    """
+    recover_jobs()
+    catalogue = build_voice_catalogue()
+    for row in catalogue["voices"]:
+        row.update(describe_preview(row, latest_job_for_voice(row["voice_id"])))
+    catalogue["preview_profiles"] = sorted(PREVIEW_PROFILES)
+    catalogue["generated_kinds"] = list(GENERATED_KINDS)
+    return catalogue
+
+
+@router.post("/api/voices-v2/previews", response_model=VoicesV2PreviewJob)
+async def create_preview(request: VoicesV2PreviewRequest):
+    """Queue one generated preview and return immediately.
+
+    Three rapid clicks produce one render: an identical queued or running job is
+    returned instead of a second, and a completed job whose audio is still on
+    disk is returned as a cache hit. The request never blocks on synthesis.
+    """
+    try:
+        return await asyncio.to_thread(request_preview, request.voice_id, request.profile)
+    except PreviewError as error:
+        raise HTTPException(status_code=error.status,
+                            detail={"code": error.code, "message": error.message}) from error
+
+
+@router.get("/api/voices-v2/previews/{job_id}", response_model=VoicesV2PreviewJob)
+async def read_preview(job_id: str):
+    """The status of one preview job."""
+    recover_jobs()
+    job = await asyncio.to_thread(get_job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404,
+                            detail={"code": "unknown_job",
+                                    "message": "No preview job with that id."})
+    return public_job(job)
+
+
+@router.post("/api/voices-v2/previews/{job_id}/cancel", response_model=VoicesV2PreviewJob)
+async def cancel_preview(job_id: str):
+    """Cancel a queued preview.
+
+    A running synthesis is not cancellable. The primitive owns the GPU claim and
+    the engine call, and stopping it mid-render would release a claim its worker
+    still holds; the caller is told so instead.
+    """
+    try:
+        return await asyncio.to_thread(cancel_job, job_id)
+    except PreviewError as error:
         raise HTTPException(status_code=error.status,
                             detail={"code": error.code, "message": error.message}) from error
 

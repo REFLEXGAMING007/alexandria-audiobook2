@@ -35,13 +35,15 @@
 
     function isPlaying(voiceId) {
         return state.select(function (current) {
-            return current.preview.state === 'playing' && current.preview.voiceId === voiceId;
+            return current.preview.playback.state === 'playing'
+                && current.preview.playback.voiceId === voiceId;
         });
     }
 
     function isLoading(voiceId) {
         return state.select(function (current) {
-            return current.preview.state === 'loading' && current.preview.voiceId === voiceId;
+            return current.preview.playback.state === 'loading'
+                && current.preview.playback.voiceId === voiceId;
         });
     }
 
@@ -52,7 +54,8 @@
         if (!audio) { return Promise.resolve(false); }
         stop();
         loadingVoiceId = voice.voiceId;
-        state.dispatch({ type: 'preview/start', voiceId: voice.voiceId });
+        state.dispatch({ type: 'preview/playback', voiceId: voice.voiceId,
+            state: 'loading', error: null });
 
         return new Promise(function (resolve) {
             var settled = false;
@@ -64,8 +67,9 @@
             };
             audio.onerror = function () {
                 state.dispatch({
-                    type: 'preview/failed',
+                    type: 'preview/playback',
                     voiceId: voice.voiceId,
+                    state: 'error',
                     error: 'This preview could not be played.'
                 });
                 finish(false);
@@ -78,18 +82,21 @@
             var started = audio.play();
             if (started && typeof started.then === 'function') {
                 started.then(function () {
-                    state.dispatch({ type: 'preview/playing', voiceId: voice.voiceId });
+                    state.dispatch({ type: 'preview/playback', voiceId: voice.voiceId,
+                        state: 'playing', error: null });
                     finish(true);
                 }, function () {
                     state.dispatch({
-                        type: 'preview/failed',
+                        type: 'preview/playback',
                         voiceId: voice.voiceId,
+                        state: 'error',
                         error: 'This preview could not be played.'
                     });
                     finish(false);
                 });
             } else {
-                state.dispatch({ type: 'preview/playing', voiceId: voice.voiceId });
+                state.dispatch({ type: 'preview/playback', voiceId: voice.voiceId,
+                    state: 'playing', error: null });
                 finish(true);
             }
         });
@@ -99,7 +106,8 @@
         var audio = element;
         if (!audio || typeof audio.pause !== 'function') { return false; }
         audio.pause();
-        state.dispatch({ type: 'preview/stop' });
+        state.dispatch({ type: 'preview/playback', voiceId: null, state: 'idle',
+            error: null });
         return true;
     }
 
@@ -111,7 +119,8 @@
             if (typeof audio.pause === 'function') { audio.pause(); }
             audio.src = '';
         }
-        state.dispatch({ type: 'preview/stop' });
+        state.dispatch({ type: 'preview/playback', voiceId: null, state: 'idle',
+            error: null });
     }
 
     /* A rapid second click on the same card must not stack two requests. */

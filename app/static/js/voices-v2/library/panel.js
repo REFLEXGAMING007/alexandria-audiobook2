@@ -286,11 +286,24 @@
      * Each is a single dispatch or a single library read. The panel never writes
      * a file and never calls the server directly. */
 
+    var previews = namespace.libraryPreviews;
+
+    /* ── Actions ─────────────────────────────────────────────────────────
+     * Each is a single dispatch or a single library read. The panel never writes
+     * a file and never calls the server directly.
+     *
+     * Preview actions go through library/previews.js rather than being written
+     * here, so the generate/poll/cancel sequence exists once and is testable
+     * without a DOM. */
+
     function open(characterKey) {
         state.dispatch({ type: 'library/open', key: characterKey || null });
     }
 
     function close() {
+        /* Stop watching a job before the panel goes: a poll that outlives the
+         * library would keep re-rendering a region nobody is looking at. */
+        previews.stopPolling();
         audio.stop();
         state.dispatch({ type: 'library/close' });
     }
@@ -389,8 +402,10 @@
         });
     }
 
+    /* Playback lives in library/previews.js now, so a recorded and a generated
+     * preview reach the audio manager by the same path. */
     function preview(voiceId) {
-        return audio.toggle(findVoice(voiceId));
+        return previews.play(voiceId);
     }
 
     /* ── Wiring ───────────────────────────────────────────────────────── */
@@ -415,7 +430,12 @@
         var name = action.getAttribute('data-voicesv2-action');
         var voiceId = action.getAttribute('data-voicesv2-voice');
         if (name === 'choose-voice') { choose(voiceId); return true; }
-        if (name === 'preview-voice') { preview(voiceId); return true; }
+        if (name === 'generate-preview') { previews.generate(voiceId); return true; }
+        if (name === 'play-preview') { previews.play(voiceId); return true; }
+        if (name === 'cancel-preview') {
+            previews.cancel(action.getAttribute('data-voicesv2-job') || voiceId);
+            return true;
+        }
         if (name === 'toggle-favorite') { toggleFavorite(voiceId); return true; }
         if (name === 'library-previous') { step(-1); return true; }
         if (name === 'library-next') { step(1); return true; }
@@ -445,14 +465,16 @@
     }
 
     function unmount() {
+        /* Polling stops with the panel, so a job in flight is not watched by a
+         * tab that is no longer showing it. The server's own stale recovery is
+         * what resolves it if the browser goes away entirely. */
+        previews.stopPolling();
         bound = false;
         haystacks = {};
     }
-
     function mount() {
         bind();
     }
-
     /* Called when a new catalogue arrives, so searchable text is built once per
      * load rather than once per keystroke. */
     function setCatalogue(voices) {

@@ -44,14 +44,16 @@ const CATALOGUE={schema_version:1,voices:[
    unavailable_reason:'',downloaded:true,favorite:false,favorite_supported:true,
    adapter_id:'baritone',adapter_path:'lora_models/baritone',ref_audio:null,ref_text:null,
    preview_capable:true,preview_url:'/lora_models/baritone/preview_sample.wav',
-   preview_kind:'recording',tags:[],metadata:{epochs:20}},
+   preview_kind:'recording',preview_generatable:true,preview_state:'none',
+   preview_job_id:null,tags:[],metadata:{epochs:20}},
   {voice_id:'lora:mystery',native_id:'mystery',kind:'lora',name:'mystery',label:'mystery',
    source:'Trained LoRA',realisation:'adapter',description:'No useful description here',
    sample_text:null,gender:'unknown',gender_source:'unknown',age_group:'unknown',
    age_group_source:'unknown',added_at:null,availability:'available',available:true,
    unavailable_reason:'',downloaded:true,favorite:false,favorite_supported:true,
    adapter_id:'mystery',adapter_path:'lora_models/mystery',ref_audio:null,ref_text:null,
-   preview_capable:false,preview_url:null,preview_kind:null,tags:[],metadata:{}},
+   preview_capable:false,preview_url:null,preview_kind:null,preview_generatable:true,
+   preview_state:'none',preview_job_id:null,tags:[],metadata:{}},
   {voice_id:'builtin:watson',native_id:'watson',kind:'builtin_lora',name:'watson',
    label:'watson',source:'Built-in LoRA',realisation:'adapter',
    description:'A measured narrator voice',sample_text:null,gender:'male',
@@ -59,7 +61,8 @@ const CATALOGUE={schema_version:1,voices:[
    availability:'unavailable',available:false,unavailable_reason:'Not downloaded.',
    downloaded:false,favorite:false,favorite_supported:true,adapter_id:'watson',
    adapter_path:'builtin_lora/watson',ref_audio:null,ref_text:null,preview_capable:false,
-   preview_url:null,preview_kind:null,tags:[],metadata:{}},
+   preview_url:null,preview_kind:null,preview_generatable:true,preview_state:'none',
+   preview_job_id:null,tags:[],metadata:{}},
   {voice_id:'clone:clip',native_id:'clip',kind:'clone',name:'A clip',label:'A clip',
    source:'Uploaded clone',realisation:'clone_recording',
    description:'the exact words spoken in the clip',sample_text:'the exact words spoken',
@@ -75,8 +78,8 @@ const CATALOGUE={schema_version:1,voices:[
    added_at:null,availability:'available',available:true,unavailable_reason:'',
    downloaded:true,favorite:false,favorite_supported:false,adapter_id:null,
    adapter_path:null,ref_audio:'designed_voices/narrator.wav',ref_text:null,
-   preview_capable:true,preview_url:'/designed_voices/narrator.wav',preview_kind:'recording',
-   tags:[],metadata:{}}],
+   preview_capable:true,preview_url:'/designed_voices/narrator.wav',preview_kind:'generated',
+   preview_generatable:false,preview_state:'generated',preview_job_id:null,tags:[],metadata:{}}],
  counts:{total:6,available:4,unavailable:2},kinds:['lora','builtin_lora','clone','design'],
  favorite_kinds:['lora','builtin_lora'],warnings:[],unsupported_kinds:{}};"""
 
@@ -557,8 +560,12 @@ assert(html.includes('The adapter files are not on disk.'),html);
     def test_a_voice_with_no_preview_says_so_instead_of_offering_a_dead_control(self):
         self.lib("open(null);await turn();", r"""
 const html=node('library-list').innerHTML;
-assert(html.includes('No preview recorded'),html);
-assert(html.includes('data-voicesv2-action="preview-voice"'),'the capable ones still offer one');
+assert(html.includes('No preview'),html);
+assert(html.includes('Not generated yet.'),'a generatable voice says why it has none');
+assert(html.includes('data-voicesv2-action="generate-preview"'),
+  'an unrendered adapter offers generation instead of a dead play button');
+assert(html.includes('data-voicesv2-action="play-preview"'),
+  'the voices that do have audio still offer playback');
 """)
 
     def test_the_selected_voice_is_marked_and_readable_without_colour(self):
@@ -782,11 +789,11 @@ audio.setAudioFactory(function(){
     pause:function(){this.paused=true;}};
 });
 assert.strictEqual(await audio.play(V2.library.panel.findVoice('lora:baritone')),true);
-assert.strictEqual(V2.voiceSaveState(V2.getState()).state,'idle');
-assert.strictEqual(V2.getState().preview.state,'playing');
-assert.strictEqual(V2.getState().preview.voiceId,'lora:baritone');
+assert.strictEqual(V2.getState().preview.playback.state,'playing');
+assert.strictEqual(V2.getState().preview.playback.voiceId,'lora:baritone');
 await audio.play(V2.library.panel.findVoice('clone:clip'));
-assert.strictEqual(V2.getState().preview.voiceId,'clone:clip','the second replaces the first');
+assert.strictEqual(V2.getState().preview.playback.voiceId,'clone:clip','the second replaces the first');
+assert.strictEqual(V2.getState().preview.playback.state,'playing','only one voice is audible');
 """)
 
     def test_a_voice_with_no_preview_is_refused_rather_than_silently_doing_nothing(self):
@@ -796,7 +803,7 @@ audio.setAudioFactory(function(){
   return {src:'',preload:'none',play:function(){return Promise.resolve();},pause:function(){}};
 });
 assert.strictEqual(await audio.play(V2.library.panel.findVoice('lora:mystery')),false);
-assert.strictEqual(V2.getState().preview.state,'idle');
+assert.strictEqual(V2.getState().preview.playback.state,'idle');
 """)
 
     def test_a_failed_play_reports_an_error_and_clears_the_loading_state(self):
@@ -807,10 +814,10 @@ audio.setAudioFactory(function(){
     pause:function(){}};
 });
 await audio.play(V2.library.panel.findVoice('lora:baritone'));
-const preview=V2.getState().preview;
-assert.strictEqual(preview.state,'error');
-assert(preview.error);
-assert.notStrictEqual(preview.state,'loading','a failed play must not stay loading');
+const playback=V2.getState().preview.playback;
+assert.strictEqual(playback.state,'error');
+assert(playback.error);
+assert.notStrictEqual(playback.state,'loading','a failed play must not stay loading');
 """)
 
     def test_closing_the_library_stops_any_preview(self):
@@ -824,7 +831,7 @@ audio.setAudioFactory(function(){
 await audio.play(V2.library.panel.findVoice('lora:baritone'));
 V2.library.close();
 assert.ok(paused>0,'the preview was stopped');
-assert.strictEqual(V2.getState().preview.state,'idle');
+assert.strictEqual(V2.getState().preview.playback.state,'idle');
 """)
 
 
