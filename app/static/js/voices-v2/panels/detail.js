@@ -72,6 +72,11 @@
         return section('Overview', fields.join(''), 'overview');
     }
 
+    /* The voice section is the Phase 1 read-only summary followed by the editor
+     * region, which assignment.js owns. The two are separate regions on purpose:
+     * the summary is a pure projection of what is stored, and it must keep saying
+     * exactly that while a draft is pending. A user must always be able to tell
+     * "this is saved" from "this is what I picked". */
     function voiceSection(character) {
         var voice = character.voice;
         var fields = [
@@ -86,6 +91,9 @@
                 ? value(labels.titleise(character.personaStatus))
                 : value('Not recorded', 'vv2-muted'))
         ];
+        if (voice.type) {
+            fields.push(row('Stored type', value(voice.type, 'vv2-mono')));
+        }
         if (voice.adapterId) {
             fields.push(row('Adapter', value(voice.adapterId, 'vv2-mono'), voice.adapterAvailable
                 ? null : 'vv2-warn'));
@@ -104,7 +112,8 @@
         if (voice.ensembleMembers) {
             fields.push(row('Ensemble members', value(String(voice.ensembleMembers))));
         }
-        return section('Current voice', fields.join(''), 'voice');
+        return section('Current voice', fields.join(''), 'voice')
+            + '<div data-voicesv2-region="voice-editor" class="vv2-editor-region"></div>';
     }
 
     /* Traits are reported per character AND per state, because `speaker_traits`

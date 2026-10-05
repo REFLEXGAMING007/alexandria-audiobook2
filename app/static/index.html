@@ -700,6 +700,11 @@
         #voicesv2-tab .vv2-badge-unknown { opacity: 0.85; }
         #voicesv2-tab .vv2-detail-card .vv2-detail-empty { padding: 1.5rem 0; }
         #voicesv2-tab .vv2-detail-section + .vv2-detail-section { border-top: 1px solid var(--border-color); margin-top: 0.9rem; padding-top: 0.9rem; }
+        #voicesv2-tab .vv2-editor-region { border-top: 1px solid var(--border-color); margin-top: 0.9rem; padding-top: 0.9rem; }
+        #voicesv2-tab .vv2-editor { display: grid; gap: 0.35rem; }
+        #voicesv2-tab .vv2-save-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+        #voicesv2-tab .vv2-save-actions :disabled { cursor: not-allowed; }
+        #voicesv2-tab .vv2-save-state { font-size: 0.8125rem; }
         #voicesv2-tab .vv2-detail-title { font-size: 0.9375rem; margin-bottom: 0.5rem; }
         #voicesv2-tab .vv2-fields { display: grid; gap: 0.35rem; margin: 0; }
         #voicesv2-tab .vv2-field { display: grid; gap: 0.1rem; grid-template-columns: minmax(0, 1fr); }
@@ -719,6 +724,10 @@
             #voicesv2-tab .vv2-toolbar :is(input, select, button) { width: 100%; }
             #voicesv2-tab .vv2-list-region { max-height: none; }
             #voicesv2-tab .vv2-row { padding: 0.7rem 0.6rem; }
+            /* Save, Clear and Discard stack rather than squeeze into three
+             * unreadable columns on a phone. */
+            #voicesv2-tab .vv2-save-actions { flex-direction: column; align-items: stretch; }
+            #voicesv2-tab .vv2-save-actions :is(button) { width: 100%; margin-right: 0; }
         }
         @media (min-width: 992px) {
             #voicesv2-tab .vv2-workspace { align-items: start; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); }
@@ -3015,6 +3024,7 @@
     <script src="/static/js/voices-v2/panels/toolbar.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/panels/characters.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/panels/detail.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/panels/assignment.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/lifecycle.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/index.js?v=__APP_BUILD__"></script>
     <script src="/static/js/app-reports.js?v=__APP_BUILD__"></script>

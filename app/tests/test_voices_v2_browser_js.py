@@ -621,7 +621,7 @@ assert(node('characters').innerHTML.includes('MIRA'));
     def test_a_failed_read_offers_a_retry_that_recovers(self):
         self.run_node(r"""
 const V2=ctx.window.VoicesV2;
-const held=holdNext();
+const held=holdNext('/api/voices-v2/characters');
 const pending=V2.mount();await turn();
 held.reject(Object.assign(Error('backend down'),{status:503,detail:'down'}));
 assert.strictEqual(await pending,false);
@@ -632,7 +632,7 @@ assert(node('detail').innerHTML.includes('Select a character'),
 const retry=actionButton('retry');
 root.fire('click',{target:retry});
 await turn();await turn();await turn();
-assert.strictEqual(apiCalls.length,2,'retry re-reads');
+assert.strictEqual(characterCalls().length,2,'retry re-reads');
 assert.strictEqual(V2.getState().ui.error,null,'a successful retry clears the error');
 assert(status.innerHTML.includes('alert-danger')===false);
 """)

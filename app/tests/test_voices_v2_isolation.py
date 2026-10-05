@@ -43,7 +43,7 @@ V2_DIR = STATIC / "js" / "voices-v2"
 V2_FILES = (
     "core.js", "state.js", "selectors.js", "api.js",
     "widgets/labels.js", "widgets/states.js",
-    "panels/toolbar.js", "panels/characters.js", "panels/detail.js",
+    "panels/toolbar.js", "panels/characters.js", "panels/detail.js", "panels/assignment.js",
     "lifecycle.js", "index.js",
 )
 INDEX = STATIC / "index.html"
@@ -240,21 +240,22 @@ assert.strictEqual(Object.keys(ctx.window.VoicesV2).length>0,true);
     def test_namespace_publishes_only_the_documented_phase_zero_surface(self):
         body = r"""
 const ns=ctx.window.VoicesV2;
-assert.deepStrictEqual(Object.keys(ns).sort(),['NAMESPACE','ROOT_ID','api','characterSummary',
-  'contains','core','describeError','dispatch','escape','getRoot','getState','isMounted',
-  'labels','lifecycle','mount','notify','notifyFailure','panels','phase','refresh','root',
+assert.deepStrictEqual(Object.keys(ns).sort(),['NAMESPACE','ROOT_DIR','api','canSaveVoice',
+  'characterSummary','contains','core','describeError','dispatch','escape','getRoot','getState',
+  'isMounted','labels','lifecycle','mount','notify','notifyFailure','panels','phase','refresh','root',
   'select','selectors','selectedCharacter','state','states','subscribe','unmount',
-  'visibleCharacters']);
-assert.strictEqual(ns.phase,1);
+  'visibleCharacters','voiceDraft','voiceSaveState']);
+assert.strictEqual(ns.phase,2);
 assert.strictEqual(ns.root,'voicesv2-tab');
 assert.strictEqual(ns.core.ROOT_ID,'voicesv2-tab');
 assert(Object.isFrozen(ns.api),'the API boundary must not be rewritable');
-assert.deepStrictEqual(Object.keys(ns.api.PATHS),['characters']);
+assert.deepStrictEqual(Object.keys(ns.api.PATHS),['characters','command','voices']);
 for(const name of ['mount','refresh','unmount','isMounted','select','subscribe','dispatch',
-  'visibleCharacters','characterSummary','selectedCharacter']){
+  'visibleCharacters','characterSummary','selectedCharacter','voiceDraft','canSaveVoice',
+  'voiceSaveState']){
   assert.strictEqual(typeof ns[name],'function',name);
 }
-for(const panel of ['toolbar','charactersPanel','detailPanel']){
+for(const panel of ['toolbar','charactersPanel','detailPanel','assignmentPanel']){
   assert(ns.panels[panel],'missing panel '+panel);
 }
 """
@@ -395,13 +396,32 @@ class JsIsolationTests(unittest.TestCase):
                     self.assertNotRegex(code, r"\bAPI\.",
                                         f"{name} must call namespace.api, not API, directly")
 
-    def test_store_does_not_invent_a_second_save_contract(self):
-        """Guards the tempting shortcut: keeping V2's own revision/book_token
-        instead of adopting the existing guarded save contract. Phase 0 reads
-        only, so neither field may appear yet."""
+    def test_v2_adopts_the_existing_save_contract_rather_than_inventing_one(self):
+        """Phase 2 writes, so this is no longer "V2 has no save tokens" - it is
+        "V2 sends the tokens the existing contract defines, and does not compute
+        its own or write through a second path".
+
+        The three failure modes worth a gate:
+        - computing a revision client-side, so V2's idea of staleness drifts from
+          the server's;
+        - posting straight to /api/voice_config/save with a rebuilt entry, which
+          is exactly the field-stripping the Phase 0 design avoided;
+        - renaming the tokens, which would silently disable the server's guard.
+        """
         code = "".join(self._code(name) for name in V2_FILES)
-        for field in ("revision", "book_token"):
-            self.assertNotRegex(code, rf"\b{field}\b")
+        # The wire names come from the shared API helper's request shape.
+        api = self._code("api.js")
+        self.assertIn("revision: command.revision", api)
+        self.assertIn("book_token: command.bookToken", api)
+        self.assertIn("revision", code, "V2 must present the revision it was given")
+        self.assertIn("bookToken", code, "V2 must present the book token it was given")
+        # Nothing computes a revision, and nothing bypasses the V2 command route.
+        # `scriptSha256` is a field name the projection hands over, not a hash V2
+        # performs, so the ban is on the call forms rather than on the substring.
+        for banned in ("createHash", "subtle.digest", "crypto.", "digest("):
+            self.assertNotIn(banned, code)
+        self.assertNotIn("/api/voice_config/save", code)
+        self.assertNotIn("/api/voice_config/", code)
 
     def test_v2_scripts_load_after_core_and_before_reports(self):
         html = read_index()
@@ -428,9 +448,12 @@ class StoreIsolationTests(_NodeTestCase):
         self.run_node(r"""
 const state=ctx.window.VoicesV2.getState();
 assert.deepStrictEqual(Object.keys(state).sort(),
-  ['catalogue','characters','filters','library','meta','orphans','selection','ui']);
+  ['catalogue','characters','draft','filters','library','meta','orphans','save','selection','ui']);
 assert.deepStrictEqual(Object.keys(state.ui).sort(),['error','loadedAt','loading','mounted']);
-assert.deepStrictEqual(Object.keys(state.selection).sort(),['key']);
+assert.deepStrictEqual(Object.keys(state.selection).sort(),['blocked','key','pending']);
+assert.deepStrictEqual(Object.keys(state.draft).sort(),
+  ['characterKey','cleared','dirty','voiceId']);
+assert.deepStrictEqual(Object.keys(state.save).sort(),['code','message','savedAt','state']);
 const walk=value=>{if(!value||typeof value!=='object')return;
   assert(!value.nodeType,'a DOM node reached the store');Object.values(value).forEach(walk);};
 walk(state);
@@ -520,9 +543,10 @@ assert.deepStrictEqual(apiCalls,[],'no deferred mount may fire for a hidden tab'
         self.run_node(r"""
 assert.strictEqual(ctx.window.VoicesV2.isMounted(),true);
 assert.strictEqual((root.listeners.click||[]).length,1);
-assert.strictEqual(apiCalls.length,1);
+assert.strictEqual(characterCalls().length,1);
+assert.strictEqual(catalogueCalls().length,1,'the catalogue is read once at load');
 await turn();
-assert.strictEqual(apiCalls.length,1,'the load-time guard must read once');
+assert.strictEqual(apiCalls.length,2,'the load-time guard must read neither twice');
 """, pre="root.style.display='block';")
 
     def test_mount_runs_once_binds_one_listener_and_reads_through_the_api_boundary(self):
@@ -534,11 +558,12 @@ await Promise.all([V2.mount(),V2.mount(),V2.mount()]);
 assert.strictEqual(V2.isMounted(),true);
 assert.strictEqual((root.listeners.click||[]).length,1,
   'repeated navigation must not stack listeners');
-assert.deepStrictEqual(apiCalls,['/api/voices-v2/characters'],
+assert.deepStrictEqual(characterCalls(),['/api/voices-v2/characters'],
   'concurrent mounts must collapse into one read');
 /* Sequential re-entry, e.g. leaving the tab and coming back. */
 await V2.mount();
-assert.strictEqual(apiCalls.length,2,'re-entering the tab re-reads the projection');
+assert.strictEqual(characterCalls().length,2,'re-entering the tab re-reads the projection');
+assert.strictEqual(catalogueCalls().length,1,'the catalogue is not re-read on re-entry');
 assert.strictEqual((root.listeners.click||[]).length,1,'a re-read must not re-bind');
 assert(apiCalls.every(p=>p.startsWith('/api/voices-v2/')),
   'V2 must not call a Voices endpoint');
@@ -556,7 +581,7 @@ assert.deepStrictEqual(apiCalls,[]);
     def test_a_failed_read_reports_inline_and_through_shared_error_reporting(self):
         self.run_node(r"""
 const V2=ctx.window.VoicesV2;
-const held=holdNext();
+const held=holdNext('/api/voices-v2/characters');
 const pending=V2.mount();await turn();
 held.reject(Object.assign(Error('backend unreachable'),{status:503,detail:'unavailable'}));
 assert.strictEqual(await pending,false);
@@ -574,7 +599,7 @@ assert.strictEqual(live.textContent,'Projection unavailable');
     def test_unmount_removes_the_listener_and_discards_a_read_already_in_flight(self):
         self.run_node(r"""
 const V2=ctx.window.VoicesV2;
-const held=holdNext();
+const held=holdNext('/api/voices-v2/characters');
 const pending=V2.mount();await turn();
 assert.strictEqual(V2.unmount(),true);
 assert.strictEqual((root.listeners.click||[]).length,0);
@@ -591,15 +616,16 @@ assert.strictEqual(V2.unmount(),false,'unmount is idempotent');
     def test_a_reload_click_inside_the_root_re_reads_and_others_do_not(self):
         self.run_node(r"""
 const V2=ctx.window.VoicesV2;
-await V2.mount();assert.strictEqual(apiCalls.length,1);
+await V2.mount();await turn();
+assert.strictEqual(characterCalls().length,1);
 root.fire('click',{target:reload});
 await turn();await turn();
-assert.strictEqual(apiCalls.length,2,'a V2 action must re-read');
+assert.strictEqual(characterCalls().length,2,'a V2 action must re-read');
 root.fire('click',{target:node('characters')});
 root.fire('click',{target:makeNode('button',{})});
 root.fire('click',{target:null});
 await turn();await turn();
-assert.strictEqual(apiCalls.length,2,'an unrecognised click must do nothing');
+assert.strictEqual(characterCalls().length,2,'an unrecognised click must do nothing');
 """)
 
 
@@ -626,7 +652,9 @@ class RouterIsolationTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(path.startswith("/api/voices-v2/"),
                                 f"Voices V2 registered {path} outside its prefix")
-        self.assertEqual({("GET", "/api/voices-v2/characters")}, self._routes(self.v2))
+        self.assertEqual({("GET", "/api/voices-v2/characters"),
+                          ("GET", "/api/voices-v2/voices"),
+                          ("POST", "/api/voices-v2/command")}, self._routes(self.v2))
 
     def test_v2_adds_no_route_to_any_existing_router(self):
         app = self.FastAPI()
@@ -720,7 +748,8 @@ root.style.display='none';
 /* Every V2 region the browser owns. The harness registers them all and throws on
    an unregistered selector, so a panel that reaches for an element V2 does not
    own fails the test instead of quietly returning null in production. */
-const regionNames=['status','live','search','counts','characters','detail','reset-filters',
+const regionNames=['status','live','search','counts','characters','detail','voice-editor',
+  'reset-filters',
   'filter-scope','filter-gender','filter-ageGroup','filter-assigned','filter-ready',
   'filter-personaStatus','filter-priority','filter-problems','filter-sort'];
 const regions={};
@@ -754,7 +783,7 @@ function actionButton(action){
   descendants.push(el);
   return el;
 }
-['live','search','counts','characters','detail'].forEach(name=>{
+['live','search','counts','characters','detail','voice-editor'].forEach(name=>{
   trackText(regions['[data-voicesv2-region="'+name+'"]']);
 });
 /* Any other element id throws, so a V2 lookup that leaves its own tab fails the
@@ -764,15 +793,25 @@ const document={getElementById(id){
   if(!Object.prototype.hasOwnProperty.call(byId,id))throw Error('V2 must not look up #'+id);
   return byId[id];},createElement(tag){return makeNode(tag,{});}};
 const apiCalls=[],toasts=[],actionErrors=[];
+/* Phase 2 added a second read (the assignable voice catalogue), so tests that
+   care about the projection count characters only. Asserting the total instead
+   would make every lifecycle test depend on the catalogue's existence. */
+const characterCalls=()=>apiCalls.filter(p=>p.startsWith('/api/voices-v2/characters'));
+const catalogueCalls=()=>apiCalls.filter(p=>p.startsWith('/api/voices-v2/voices'));
 let payload={schema_version:1,book:{book_id:'B',script_present:true},traits_available:true,
   characters:[],orphans:[],vocabularies:{genders:['male'],age_groups:[],problem_codes:[]},
   counts:{characters:0,orphans:0}};
-let deferNext=false,resolveNext=null,rejectNext=null;
+let deferArmed=false,deferPrefix='',resolveNext=null,rejectNext=null;
 const API={get(path){
   apiCalls.push(path);
-  if(!deferNext)return Promise.resolve(JSON.parse(JSON.stringify(payload)));
-  deferNext=false;
-  return new Promise((res,rej)=>{resolveNext=res;rejectNext=rej;});
+  /* Deferring is armed explicitly and scoped to a prefix, so a test that means to
+     hold the projection read cannot accidentally hold the catalogue read that
+     mount() issues first - and no request is ever held by accident. */
+  if(deferArmed&&(!deferPrefix||path.startsWith(deferPrefix))){
+    deferArmed=false;
+    return new Promise((res,rej)=>{resolveNext=res;rejectNext=rej;});
+  }
+  return Promise.resolve(JSON.parse(JSON.stringify(payload)));
 }};
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,
   ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
@@ -793,8 +832,8 @@ const baselineGlobals=Object.getOwnPropertyNames(vmGlobal).sort();
    that wrote the expectation. A browser tab has one realm, so this is a harness
    artefact, not behaviour under test. */
 const plain=value=>JSON.parse(JSON.stringify(value));
-function holdNext(){
-  deferNext=true;
+function holdNext(prefix){
+  deferArmed=true;deferPrefix=prefix||'';
   return{resolve:v=>{const r=resolveNext;resolveNext=null;rejectNext=null;r(v);},
          reject:e=>{const r=rejectNext;resolveNext=null;rejectNext=null;r(e);}};
 }

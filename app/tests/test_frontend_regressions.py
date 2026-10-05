@@ -69,7 +69,7 @@ class FrontendJsSplitTests(unittest.TestCase):
         # about the existing app.
         expected = ("core.js", "state.js", "selectors.js", "api.js",
                    "widgets/labels.js", "widgets/states.js",
-                   "panels/toolbar.js", "panels/characters.js", "panels/detail.js",
+                   "panels/toolbar.js", "panels/characters.js", "panels/detail.js", "panels/assignment.js",
                    "lifecycle.js", "index.js")
         html = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
         positions = []

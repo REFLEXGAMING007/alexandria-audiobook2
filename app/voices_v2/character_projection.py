@@ -43,8 +43,10 @@ from speaker_identity import _identity_key, get_validated_alias_graph
 from speaker_traits import AGE_GROUPS, GENDERS, get_state_timeline
 from tts import voice_category, voice_is_set
 from utils import file_lock, is_generic_speaker, safe_load_json
+from voice_config_store import get_voice_config_revision
 
 from voices_v2 import SCHEMA_VERSION
+from voices_v2.voice_identity import catalogue_voice_id_for
 
 
 logger = logging.getLogger(__name__)
@@ -210,7 +212,9 @@ def _voice_summary(config: Dict[str, Any], name: str, book_id: Optional[str]) ->
     elif category == "ensemble":
         label = f"Ensemble of {member_count}" if member_count else "Ensemble"
     elif category == "design":
-        label = "Designed voice"
+        # The design's own name, so several designed voices are distinguishable.
+        # `voice` is what a design assignment stores.
+        label = _text(config.get("voice")) or "Designed voice"
     elif category == "clone":
         label = _text(config.get("voice")) or "Cloned voice"
     else:
@@ -218,8 +222,17 @@ def _voice_summary(config: Dict[str, Any], name: str, book_id: Optional[str]) ->
 
     return {
         "category": category,
+        # The stored `type` verbatim. `category` collapses lora and builtin_lora
+        # because synthesis treats them alike, but they are different catalogue
+        # entries and the assignment editor has to tell them apart.
+        "type": _text(config.get("type")),
         "label": label,
         "assigned": assigned,
+        # Which catalogue row this configuration names, when one does. Null is a
+        # real answer, not a gap: a design-persona preview or a deleted clone is
+        # a voice the catalogue does not hold, and the editor has to say so
+        # rather than show a selector disagreeing with what is stored.
+        "catalogue_voice_id": catalogue_voice_id_for(config),
         "adapter_id": adapter_id,
         "adapter_available": adapter_available,
         "has_ref_audio": bool(ref_audio),
@@ -491,6 +504,12 @@ def build_character_projection() -> Dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "book": book,
+        # The two fields the guarded save contract requires. The browser has to
+        # hold them from the moment it reads, because a save that cannot prove
+        # which snapshot it was based on is a save that can silently overwrite
+        # someone else's work. `book.token` changes when the book changes;
+        # `revision` changes when any voice configuration changes.
+        "revision": get_voice_config_revision(voice_config),
         "traits_available": traits_available,
         "traits_requested": _load_traits_requested(),
         "aliases_registered": bool(alias_graph),

@@ -551,9 +551,9 @@ class RouteContractTests(unittest.TestCase):
         self.assertEqual([], model.orphans)
         self.assertEqual({"characters": 0, "orphans": 0}, model.counts.model_dump())
         self.assertEqual(
-            {"schema_version", "book", "traits_available", "traits_requested",
-             "aliases_registered", "major_line_threshold", "vocabularies",
-             "characters", "orphans", "counts"},
+            {"schema_version", "book", "revision", "traits_available",
+             "traits_requested", "aliases_registered", "major_line_threshold",
+             "vocabularies", "characters", "orphans", "counts"},
             set(model.model_dump()),
             "the response must not carry anything beyond the declared shape")
 

@@ -26,7 +26,7 @@
     var selectors = namespace.selectors;
     var lifecycle = namespace.lifecycle;
 
-    namespace.phase = 1;
+    namespace.phase = 2;
     namespace.root = core.ROOT_ID;
 
     namespace.mount = lifecycle.mount;
@@ -39,12 +39,19 @@
     namespace.subscribe = state.subscribe;
     namespace.dispatch = state.dispatch;
 
-    /* The selectors are exposed because the whole point of Phase 1 is that a
+    /* The selectors are exposed because the whole point of Phase 1 was that a
      * view is a pure function of the projection, and an external caller must be
      * able to ask the same questions the panels ask. */
     namespace.visibleCharacters = selectors.selectVisible;
     namespace.characterSummary = selectors.selectSummary;
     namespace.selectedCharacter = selectors.selectSelected;
+
+    /* The draft and save reads, for the same reason: what is saved, what is
+     * pending and what may be written are all questions about state, not about
+     * the editor's markup. */
+    namespace.voiceDraft = selectors.selectDraft;
+    namespace.canSaveVoice = selectors.selectCanSave;
+    namespace.voiceSaveState = selectors.selectSaveState;
 
     var root = core.getRoot();
     if (root && root.style.display === 'block' && !lifecycle.isMounted()) {

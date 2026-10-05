@@ -112,6 +112,33 @@
         return VOICE_CATEGORY_LABELS[value] || titleise(value);
     }
 
+    /* Catalogue families, which are finer than routing categories: `lora` and
+     * `builtin_lora` both route as LoRA but are different things to choose. */
+    var VOICE_KIND_LABELS = {
+        lora: 'Trained LoRA voices',
+        builtin_lora: 'Built-in LoRA voices',
+        clone: 'Uploaded voice clones',
+        design: 'Designed voices'
+    };
+
+    function voiceKindLabel(kind) {
+        return VOICE_KIND_LABELS[kind] || titleise(kind);
+    }
+
+    /* The five save states, each named so the state is legible without relying
+     * on the colour of whatever element carries it. */
+    var SAVE_STATE_LABELS = {
+        idle: 'No pending change',
+        saving: 'Saving\u2026',
+        saved: 'Saved',
+        error: 'Not saved',
+        conflict: 'Not saved \u2014 the configuration changed elsewhere'
+    };
+
+    function saveStateLabel(state) {
+        return SAVE_STATE_LABELS[state] || titleise(state);
+    }
+
     function assignedLabel(assigned) {
         return assigned ? ASSIGNED_LABELS.true : ASSIGNED_LABELS.false;
     }
@@ -153,6 +180,7 @@
         genderLabel: genderLabel,
         ageGroupLabel: ageGroupLabel,
         voiceCategoryLabel: voiceCategoryLabel,
+        voiceKindLabel: voiceKindLabel,
         assignedLabel: assignedLabel,
         priorityLabel: priorityLabel,
         readyLabel: readyLabel,
@@ -161,6 +189,7 @@
         traitSentence: traitSentence,
         lineCountLabel: lineCountLabel,
         titleise: titleise,
+        saveStateLabel: saveStateLabel,
         sortKeyLabel: function (key) {
             var labels = {
                 name: 'Name', lineCount: 'Line count', priority: 'Priority',

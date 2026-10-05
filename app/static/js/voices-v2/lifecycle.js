@@ -34,21 +34,24 @@
     var toolbar = namespace.toolbar;
     var charactersPanel = namespace.charactersPanel;
     var detailPanel = namespace.detailPanel;
+    var assignmentPanel = namespace.assignmentPanel;
 
     var ACTION_SELECTOR = '[data-voicesv2-action]';
     var listening = false;
     var inFlight = null;
+    var catalogueInFlight = null;
     var stopRenderSubscription = null;
     var renderQueued = false;
 
-    var PANELS = [toolbar, charactersPanel, detailPanel];
+    var PANELS = [toolbar, charactersPanel, detailPanel, assignmentPanel];
 
     /* Published so the set of panels is discoverable in one place: a new panel
      * is added here and nowhere else, and a test can assert the roster. */
     namespace.panels = {
         toolbar: toolbar,
         charactersPanel: charactersPanel,
-        detailPanel: detailPanel
+        detailPanel: detailPanel,
+        assignmentPanel: assignmentPanel
     };
 
     function isMounted() {
@@ -59,25 +62,58 @@
         return core.region(name);
     }
 
-    /* Loading, error and the book-level banners all live in one region, above the
-     * controls. Detail problems live in the detail panel instead, because a
-     * warning about one character should not look like a warning about the read.
-     * The error and the loading state are mutually exclusive, so the error wins;
-     * the two book-level notices are independent and may both apply. */
-    function statusMarkup(nextState) {
-        if (nextState.ui.error) { return states.errorMarkup(nextState.ui.error); }
-        if (nextState.ui.loading) { return states.loadingMarkup(); }
-        if (nextState.meta.schemaVersion === null) { return ''; }
-        return states.traitsBanner(nextState.meta) + states.aliasesBanner(nextState.meta);
-    }
-
     function liveText(nextState) {
         if (nextState.ui.loading) { return 'Loading'; }
         if (nextState.ui.error) { return 'Projection unavailable'; }
         if (nextState.meta.schemaVersion === null) { return 'Not loaded'; }
         var summary = selectors.selectSummary(nextState);
-        return summary.shown + ' of ' + summary.total + ' characters';
+        var base = summary.shown + ' of ' + summary.total + ' characters';
+        var save = selectors.selectSaveState(nextState);
+        if (save.state === 'saving') { return base + ', saving voice change'; }
+        if (save.state === 'saved') { return base + ', voice saved'; }
+        if (save.state === 'conflict' || save.state === 'error') {
+            return base + ', voice change not saved';
+        }
+        return base;
     }
+
+    /* The blocked-navigation prompt. It lives in the status region because it is
+     * about leaving the editor, not about the character, and because it must be
+     * reachable even if the detail panel has scrolled away. */
+    function blockedSwitchMarkup(nextState) {
+        if (!nextState.selection.blocked || !nextState.selection.pending) { return ''; }
+        var target = selectors.findByKey(nextState, nextState.selection.pending);
+        var name = target ? target.name : 'another character';
+        var leaving = selectors.selectSelected(nextState);
+        var from = leaving ? leaving.name : 'this character';
+        return '<div class="alert alert-warning mb-0 vv2-state" role="alert">'
+            + '<strong>You have an unsaved voice change for '
+            + core.escape(from) + '.</strong> '
+            + 'Switching to ' + core.escape(name) + ' would discard it.'
+            + '<div class="vv2-save-actions mt-2">'
+            + '<button type="button" class="btn btn-sm btn-primary" '
+            + 'data-voicesv2-action="save-and-switch">Save and switch</button>'
+            + '<button type="button" class="btn btn-sm btn-outline-secondary" '
+            + 'data-voicesv2-action="discard-and-switch">Discard and switch</button>'
+            + '<button type="button" class="btn btn-sm btn-outline-secondary" '
+            + 'data-voicesv2-action="cancel-switch">Stay here</button>'
+            + '</div></div>';
+    }
+
+/* Loading, error and the book-level banners all live in one region, above
+     * the controls. Detail problems live in the detail panel instead, because a
+     * warning about one character should not look like a warning about the read.
+     * The error and the loading state are mutually exclusive, so the error wins;
+     * a blocked switch and the book-level notices are independent and may both
+     * apply, with the switch first because it is the one that needs an answer. */
+    function statusMarkup(nextState) {
+            if (nextState.ui.error) { return states.errorMarkup(nextState.ui.error); }
+            if (nextState.ui.loading) { return states.loadingMarkup(); }
+            var notices = blockedSwitchMarkup(nextState);
+            if (nextState.meta.schemaVersion === null) { return notices; }
+            return notices + states.traitsBanner(nextState.meta)
+                + states.aliasesBanner(nextState.meta);
+        }
 
     /* Panels are the only writers of panel markup; this only decides what the
      * tab says about the read itself. */
@@ -87,7 +123,10 @@
 
         toolbar.sync(nextState);
         charactersPanel.render(nextState);
+        /* The detail first: it owns the voice-editor region, and the editor must
+         * be rendered into a node that exists before it looks for it. */
         detailPanel.render(nextState);
+        assignmentPanel.render(nextState);
 
         var status = region('status');
         if (status) { status.innerHTML = statusMarkup(nextState); }
@@ -138,6 +177,22 @@
         }
         if (name === 'clear-filters') {
             state.dispatch({ type: 'filters/reset' });
+            return true;
+        }
+        /* The blocked-switch prompt offers three answers and resolves none of them
+         * silently: stay leaves the draft alone, discard accepts the switch and
+         * forgets the draft, and save goes through the one save path so the
+         * switch only happens once the write has actually succeeded. */
+        if (name === 'cancel-switch') {
+            state.dispatch({ type: 'selection/cancelPending' });
+            return true;
+        }
+        if (name === 'discard-and-switch') {
+            state.dispatch({ type: 'selection/acceptPending' });
+            return true;
+        }
+        if (name === 'save-and-switch') {
+            assignmentPanel.save();
             return true;
         }
         return false;
@@ -212,6 +267,33 @@
         return pending;
     }
 
+    /* The assignable voice catalogue, read alongside the projection.
+     *
+     * A failure here is reported inside the editor rather than as a tab-level
+     * error: the characters are still perfectly browsable without it, and a
+     * whole-tab error banner for a missing voice list would misdescribe the
+     * situation. The read is issued once per mount cycle and never stacked.
+     */
+    function loadCatalogue() {
+        if (catalogueInFlight) { return catalogueInFlight; }
+        var pending = api.fetchVoices().then(function (payload) {
+            catalogueInFlight = null;
+            state.dispatch({ type: 'catalogue/set', catalogue: selectors.adaptCatalogue(payload) });
+            render();
+            return true;
+        }, function (error) {
+            catalogueInFlight = null;
+            state.dispatch({
+                type: 'catalogue/error',
+                error: core.describeError(error)
+            });
+            render();
+            return false;
+        });
+        catalogueInFlight = pending;
+        return pending;
+    }
+
     function mount() {
         if (!core.getRoot()) { return Promise.resolve(false); }
         if (isMounted()) { return refresh(); }
@@ -224,6 +306,7 @@
             if (panel && typeof panel.mount === 'function') { panel.mount(state.getState()); }
         });
         render();
+        loadCatalogue();
         return refresh();
     }
 
@@ -252,6 +335,7 @@
         render: render,
         scheduleRender: scheduleRender,
         applyPayload: applyPayload,
+        loadCatalogue: loadCatalogue,
         statusMarkup: statusMarkup,
         liveText: liveText
     };

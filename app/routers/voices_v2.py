@@ -29,11 +29,14 @@ single place a Voices V2 URL is written down and
 import asyncio
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from voice_config_store import VoiceConfigConflict
 from voices_v2 import SCHEMA_VERSION
 from voices_v2.character_projection import build_character_projection
+from voices_v2.voice_assignment import (VoiceCommandError, build_voice_catalogue,
+                                        execute_voice_command, plan_voice_command)
 
 
 router = APIRouter()
@@ -43,6 +46,13 @@ class VoicesV2VoiceSummary(BaseModel):
     """What the browser needs to name a voice, and nothing it could write back."""
 
     category: str
+    # The stored type verbatim: `category` collapses lora and builtin_lora for
+    # synthesis, but they are different catalogue entries and the editor has to
+    # tell them apart.
+    type: Optional[str] = None
+    # Which catalogue row this configuration names, when one does. Null is a real
+    # answer, not a gap.
+    catalogue_voice_id: Optional[str] = None
     label: str
     assigned: bool
     adapter_id: Optional[str] = None
@@ -145,11 +155,80 @@ class VoicesV2Counts(BaseModel):
     orphans: int = 0
 
 
+class VoicesV2VoiceOption(BaseModel):
+    """One assignable voice. A shape over the manifests the application already
+    owns, not a catalogue of its own: the adapter rows come from the same files
+    `/api/lora/models` reads and the clone and design rows from the same files
+    `/api/clone_voices/list` and `/api/voice_design/list` read."""
+
+    voice_id: str
+    kind: str
+    name: str
+    description: Optional[str] = None
+    gender: Optional[str] = None
+    favorite: bool = False
+    downloaded: bool = True
+    adapter_id: Optional[str] = None
+    adapter_path: Optional[str] = None
+    available: bool = True
+    unavailable_reason: str = ""
+    ref_audio: Optional[str] = None
+    ref_text: Optional[str] = None
+
+
+class VoicesV2VoiceCounts(BaseModel):
+    total: int = 0
+    available: int = 0
+    unavailable: int = 0
+
+
+class VoicesV2VoiceCatalogue(BaseModel):
+    voices: List[VoicesV2VoiceOption] = Field(default_factory=list)
+    counts: VoicesV2VoiceCounts = Field(default_factory=VoicesV2VoiceCounts)
+    kinds: List[str] = Field(default_factory=list)
+    unsupported_kinds: Dict[str, str] = Field(default_factory=dict)
+
+
+class VoicesV2CommandRequest(BaseModel):
+    """A single-character write, described as an intention rather than a file.
+
+    The client names a character and a catalogue voice and nothing else. It
+    cannot describe a configuration: the stored entry is read, merged and
+    revalidated on the server, so a client can neither drop a field it does not
+    understand nor write a path the engine could not resolve.
+    """
+
+    command: str
+    character: str
+    voice_id: Optional[str] = None
+    revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    book_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class VoicesV2CommandResponse(BaseModel):
+    status: str
+    character: str
+    voice_id: Optional[str] = None
+    revision: Optional[str] = None
+    book_token: Optional[str] = None
+
+
+class VoicesV2ErrorResponse(BaseModel):
+    """A refusal carries a stable code so the UI can branch without parsing prose."""
+
+    code: str
+    message: str
+
+
 class VoicesV2CharactersResponse(BaseModel):
     """The Phase 1 character projection for the active book."""
 
     schema_version: int = SCHEMA_VERSION
     book: VoicesV2Book = Field(default_factory=VoicesV2Book)
+    # The voice-config revision the guarded save contract requires. Held from the
+    # moment the browser reads, because a save that cannot prove which snapshot
+    # it was based on can silently overwrite someone else's work.
+    revision: Optional[str] = None
     # Book-level, so the UI can say "this book has no per-line traits" instead of
     # presenting an empty gender filter that silently matches nobody.
     traits_available: bool = False
@@ -172,3 +251,51 @@ async def list_characters():
     Voice Library are later phases and are deliberately absent.
     """
     return await asyncio.to_thread(build_character_projection)
+
+
+@router.get("/api/voices-v2/voices", response_model=VoicesV2VoiceCatalogue)
+async def list_assignable_voices():
+    """Every voice a single character can be assigned, with its availability.
+
+    Assembled from the manifests the application already owns. A voice whose
+    files are absent is still listed, with a reason, because a character may
+    already point at it and the user needs to see that rather than be offered a
+    selector that silently omits their current voice.
+    """
+    try:
+        return await asyncio.to_thread(build_voice_catalogue)
+    except VoiceCommandError as error:
+        raise HTTPException(status_code=error.status,
+                            detail={"code": error.code, "message": error.message}) from error
+
+
+@router.post("/api/voices-v2/command", response_model=VoicesV2CommandResponse)
+async def run_voice_command(request: VoicesV2CommandRequest):
+    """Assign or clear one character's voice, through the existing save path.
+
+    The request carries an intention, not a configuration: the stored entry is
+    read, only the voice-owning fields are replaced, the result is revalidated
+    through `VoiceConfigItem`, and `_apply_voice_save` performs the write with
+    the same lock, revision check and book-token check the Voices tab uses. A
+    stale client is refused with 409 rather than allowed to overwrite.
+    """
+    try:
+        return await asyncio.to_thread(
+            _run_command, request.command, request.character, request.voice_id,
+            request.revision, request.book_token)
+    except VoiceCommandError as error:
+        raise HTTPException(status_code=error.status,
+                            detail={"code": error.code, "message": error.message}) from error
+    except VoiceConfigConflict as error:
+        raise HTTPException(status_code=409,
+                            detail={"code": "stale_snapshot", "message": str(error)}) from error
+    except TimeoutError as error:
+        raise HTTPException(status_code=503,
+                            detail={"code": "busy",
+                                    "message": "Voice configuration is busy; try again."}) from error
+
+
+def _run_command(command, character, voice_id, revision, book_token):
+    """Plan then write, so a refusal never reaches the disk."""
+    plan = plan_voice_command(command, character, voice_id)
+    return execute_voice_command(plan, revision, book_token)

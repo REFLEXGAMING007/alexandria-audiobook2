@@ -3942,6 +3942,17 @@
             "title": "Orphans",
             "type": "array"
           },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
           "schema_version": {
             "default": 1,
             "title": "Schema Version",
@@ -3971,6 +3982,99 @@
           "major_line_threshold"
         ],
         "title": "VoicesV2CharactersResponse",
+        "type": "object"
+      },
+      "VoicesV2CommandRequest": {
+        "description": "A single-character write, described as an intention rather than a file.\n\nThe client names a character and a catalogue voice and nothing else. It\ncannot describe a configuration: the stored entry is read, merged and\nrevalidated on the server, so a client can neither drop a field it does not\nunderstand nor write a path the engine could not resolve.",
+        "properties": {
+          "book_token": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Book Token",
+            "type": "string"
+          },
+          "character": {
+            "title": "Character",
+            "type": "string"
+          },
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Revision",
+            "type": "string"
+          },
+          "voice_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Id"
+          }
+        },
+        "required": [
+          "command",
+          "character",
+          "revision",
+          "book_token"
+        ],
+        "title": "VoicesV2CommandRequest",
+        "type": "object"
+      },
+      "VoicesV2CommandResponse": {
+        "properties": {
+          "book_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Token"
+          },
+          "character": {
+            "title": "Character",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "voice_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Id"
+          }
+        },
+        "required": [
+          "status",
+          "character"
+        ],
+        "title": "VoicesV2CommandResponse",
         "type": "object"
       },
       "VoicesV2Counts": {
@@ -4136,6 +4240,167 @@
         "title": "VoicesV2Vocabularies",
         "type": "object"
       },
+      "VoicesV2VoiceCatalogue": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/VoicesV2VoiceCounts"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "unsupported_kinds": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Unsupported Kinds",
+            "type": "object"
+          },
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/VoicesV2VoiceOption"
+            },
+            "title": "Voices",
+            "type": "array"
+          }
+        },
+        "title": "VoicesV2VoiceCatalogue",
+        "type": "object"
+      },
+      "VoicesV2VoiceCounts": {
+        "properties": {
+          "available": {
+            "default": 0,
+            "title": "Available",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "unavailable": {
+            "default": 0,
+            "title": "Unavailable",
+            "type": "integer"
+          }
+        },
+        "title": "VoicesV2VoiceCounts",
+        "type": "object"
+      },
+      "VoicesV2VoiceOption": {
+        "description": "One assignable voice. A shape over the manifests the application already\nowns, not a catalogue of its own: the adapter rows come from the same files\n`/api/lora/models` reads and the clone and design rows from the same files\n`/api/clone_voices/list` and `/api/voice_design/list` read.",
+        "properties": {
+          "adapter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Id"
+          },
+          "adapter_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Path"
+          },
+          "available": {
+            "default": true,
+            "title": "Available",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "downloaded": {
+            "default": true,
+            "title": "Downloaded",
+            "type": "boolean"
+          },
+          "favorite": {
+            "default": false,
+            "title": "Favorite",
+            "type": "boolean"
+          },
+          "gender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ref_audio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Audio"
+          },
+          "ref_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Text"
+          },
+          "unavailable_reason": {
+            "default": "",
+            "title": "Unavailable Reason",
+            "type": "string"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id",
+          "kind",
+          "name"
+        ],
+        "title": "VoicesV2VoiceOption",
+        "type": "object"
+      },
       "VoicesV2VoiceSummary": {
         "description": "What the browser needs to name a voice, and nothing it could write back.",
         "properties": {
@@ -4175,6 +4440,17 @@
           "assigned": {
             "title": "Assigned",
             "type": "boolean"
+          },
+          "catalogue_voice_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalogue Voice Id"
           },
           "category": {
             "title": "Category",
@@ -4216,6 +4492,17 @@
               }
             ],
             "title": "Seed"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
           }
         },
         "required": [
@@ -10261,6 +10548,64 @@
           }
         },
         "summary": "List Characters"
+      }
+    },
+    "/api/voices-v2/command": {
+      "post": {
+        "description": "Assign or clear one character's voice, through the existing save path.\n\nThe request carries an intention, not a configuration: the stored entry is\nread, only the voice-owning fields are replaced, the result is revalidated\nthrough `VoiceConfigItem`, and `_apply_voice_save` performs the write with\nthe same lock, revision check and book-token check the Voices tab uses. A\nstale client is refused with 409 rather than allowed to overwrite.",
+        "operationId": "run_voice_command_api_voices_v2_command_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoicesV2CommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicesV2CommandResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Voice Command"
+      }
+    },
+    "/api/voices-v2/voices": {
+      "get": {
+        "description": "Every voice a single character can be assigned, with its availability.\n\nAssembled from the manifests the application already owns. A voice whose\nfiles are absent is still listed, with a reason, because a character may\nalready point at it and the user needs to see that rather than be offered a\nselector that silently omits their current voice.",
+        "operationId": "list_assignable_voices_api_voices_v2_voices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicesV2VoiceCatalogue"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Assignable Voices"
       }
     },
     "/api/voices/{speaker}/approval": {

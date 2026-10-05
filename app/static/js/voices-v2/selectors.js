@@ -45,6 +45,13 @@
         var source = (voice && typeof voice === 'object') ? voice : {};
         return {
             category: text(source.category) || 'custom',
+            /* The stored type verbatim, and which catalogue row it names when it
+             * names one. Both are null-able on purpose: a configuration can hold
+             * a voice the catalogue does not have, and the editor says so
+             * instead of showing a selector that disagrees with storage. */
+            type: typeof source.type === 'string' ? source.type : null,
+            catalogueVoiceId: typeof source.catalogue_voice_id === 'string'
+                ? source.catalogue_voice_id : null,
             label: text(source.label) || 'Unknown voice',
             assigned: boolOr(source.assigned, false),
             adapterId: typeof source.adapter_id === 'string' ? source.adapter_id : null,
@@ -169,6 +176,10 @@
         return {
             meta: {
                 schemaVersion: numberOrNull(source.schema_version),
+                /* The guarded save contract's first half. Held from the first read,
+                 * because a save that cannot prove which snapshot it was based on
+                 * can silently overwrite newer configuration. */
+                revision: typeof source.revision === 'string' ? source.revision : null,
                 book: {
                     bookId: typeof book.book_id === 'string' ? book.book_id : null,
                     token: typeof book.token === 'string' ? book.token : null,
@@ -185,6 +196,36 @@
             },
             characters: arrayOf(source.characters).map(adaptCharacter),
             orphans: arrayOf(source.orphans).map(adaptCharacter)
+        };
+    }
+
+    function adaptCatalogue(raw) {
+        var source = (raw && typeof raw === 'object') ? raw : {};
+        var counts = (source.counts && typeof source.counts === 'object') ? source.counts : {};
+        return {
+            voices: arrayOf(source.voices).map(function (voice) {
+                var entry = (voice && typeof voice === 'object') ? voice : {};
+                return {
+                    voiceId: text(entry.voice_id),
+                    kind: text(entry.kind),
+                    name: text(entry.name) || text(entry.voice_id) || 'Unnamed voice',
+                    description: typeof entry.description === 'string' ? entry.description : null,
+                    gender: typeof entry.gender === 'string' ? entry.gender : null,
+                    favorite: boolOr(entry.favorite, false),
+                    available: boolOr(entry.available, true),
+                    unavailableReason: text(entry.unavailable_reason) || ''
+                };
+            }),
+            counts: {
+                total: numberOrNull(counts.total) || 0,
+                available: numberOrNull(counts.available) || 0,
+                unavailable: numberOrNull(counts.unavailable) || 0
+            },
+            kinds: arrayOf(source.kinds).filter(function (kind) {
+                return typeof kind === 'string';
+            }),
+            unsupportedKinds: (source.unsupported_kinds && typeof source.unsupported_kinds === 'object')
+                ? source.unsupported_kinds : {}
         };
     }
 
@@ -424,9 +465,94 @@
      * which is the only meaningful direction for an age axis. */
     COMPARATORS.traitOrder = traitComparator;
 
+    /* ── The voice editor ──────────────────────────────────────────────
+     *
+     * The draft is derived, not stored as a second copy of the character. A
+     * character's own `catalogueVoiceId` IS the saved voice; the draft only
+     * records what the user has chosen *instead*. That makes "unsaved changes"
+     * a comparison rather than a flag that can drift from reality.
+     */
+
+    function currentVoiceId(character) {
+        return character ? character.voice.catalogueVoiceId : null;
+    }
+
+    /* The draft in force for the selected character: the user's edit when there
+     * is one, otherwise the character's saved voice. A draft left over from a
+     * previous character is never returned for this one. */
+    function selectDraft(state) {
+        var selected = selectSelected(state);
+        if (!selected) {
+            return { characterKey: null, voiceId: null, cleared: false, dirty: false };
+        }
+        if (state.draft.characterKey === selected.key && state.draft.dirty) {
+            return {
+                characterKey: selected.key,
+                voiceId: state.draft.voiceId,
+                cleared: state.draft.cleared,
+                dirty: true
+            };
+        }
+        return {
+            characterKey: selected.key,
+            voiceId: currentVoiceId(selected),
+            cleared: false,
+            dirty: false
+        };
+    }
+
+    /* What Save would write. Null `voiceId` with `cleared` is a clear. */
+    function selectPendingCommand(state) {
+        var draft = selectDraft(state);
+        if (!draft.dirty) { return null; }
+        return draft.cleared ? 'clear' : 'assign';
+    }
+
+    /* True only when a save is meaningful: a character is selected, the draft
+     * differs from what is stored, and nothing is already in flight. */
+    function selectCanSave(state) {
+        var draft = selectDraft(state);
+        if (!draft.characterKey || !draft.dirty) { return false; }
+        if (state.save.state === 'saving') { return false; }
+        var character = selectSelected(state);
+        if (!character) { return false; }
+        var savedId = currentVoiceId(character);
+        if (draft.cleared) { return savedId !== null; }
+        return draft.voiceId !== savedId;
+    }
+
+    /* The chosen voice, when the catalogue still holds it. A draft naming a voice
+     * that has since disappeared is reported as unavailable rather than silently
+     * treated as a valid selection. */
+    function selectChosenVoice(state) {
+        var draft = selectDraft(state);
+        if (!draft.characterKey || draft.cleared || !draft.voiceId) { return null; }
+        var found = null;
+        state.catalogue.voices.forEach(function (voice) {
+            if (voice.voiceId === draft.voiceId) { found = voice; }
+        });
+        return found;
+    }
+
+    function selectSaveState(state) {
+        return state.save;
+    }
+
+    function selectCatalogue(state) {
+        return state.catalogue;
+    }
+
     namespace.selectors = {
         adaptProjection: adaptProjection,
         adaptCharacter: adaptCharacter,
+        adaptCatalogue: adaptCatalogue,
+        currentVoiceId: currentVoiceId,
+        selectDraft: selectDraft,
+        selectPendingCommand: selectPendingCommand,
+        selectCanSave: selectCanSave,
+        selectChosenVoice: selectChosenVoice,
+        selectSaveState: selectSaveState,
+        selectCatalogue: selectCatalogue,
         searchTerms: searchTerms,
         matchesQuery: matchesQuery,
         matchesFilters: matchesFilters,

@@ -45,11 +45,17 @@
             meta: createInitialMeta(),
             characters: [],
             orphans: [],
-            catalogue: [],
+            /* The assignable voice catalogue, also a server projection. */
+            catalogue: createInitialCatalogue(),
             library: {},
             /* Session state. Lost on reload, never sent to the server. */
-            selection: { key: null },
+            selection: createInitialSelection(),
             filters: createInitialFilters(),
+            /* The one unsaved voice edit. Phase 2 is single-character, so there is
+             * deliberately one draft and not a map of them; `dirty` is the only
+             * thing that makes it worth protecting. */
+            draft: createInitialDraft(),
+            save: createInitialSave(),
             ui: {
                 mounted: false,
                 loading: false,
@@ -59,12 +65,15 @@
         };
     }
 
-    /* Book identity and the enumerations the backend derived from
-     * speaker_traits. Carried here rather than in `ui` because it is server data,
-     * not a view state, and because the filter controls are built from it. */
+    /* The two fields the guarded save contract needs, plus the catalogue
+     * enumerations and the book-level facts the toolbar and editor read. */
     function createInitialMeta() {
         return {
             schemaVersion: null,
+            /* `revision` changes when any voice configuration changes;
+             * `book.token` changes when the active book changes. A save must
+             * present both, and a refusal means the client's copy is stale. */
+            revision: null,
             book: { bookId: null, token: null, scriptSha256: null, scriptPresent: false },
             traitsAvailable: false,
             traitsRequested: null,
@@ -72,6 +81,38 @@
             majorLineThreshold: null,
             vocabularies: { genders: [], ageGroups: [], problemCodes: [] }
         };
+    }
+
+    function createInitialCatalogue() {
+        return {
+            voices: [],
+            counts: { total: 0, available: 0, unavailable: 0 },
+            kinds: [],
+            unsupportedKinds: {},
+            loaded: false,
+            error: null
+        };
+    }
+
+    /* `pending` is a selection the guard refused, and `blocked` says so. The
+     * detail view offers a choice instead of discarding the draft. */
+    function createInitialSelection() {
+        return { key: null, pending: null, blocked: false };
+    }
+
+    /* `voiceId: null` with `cleared: true` is the draft "remove this voice".
+     * `characterKey` records whose draft this is, so a draft left over from a
+     * previous character is never mistaken for this one's. */
+    function createInitialDraft() {
+        return { characterKey: null, voiceId: null, cleared: false, dirty: false };
+    }
+
+    /* One state at a time, and always with a message: the UI must never show a
+     * colour without saying what happened. */
+    var SAVE_STATES = ['idle', 'saving', 'saved', 'error', 'conflict'];
+
+    function createInitialSave() {
+        return { state: 'idle', message: null, code: null, savedAt: null };
     }
 
     /* Every narrowing and ordering choice the user can make, in one place, so
@@ -180,12 +221,85 @@
             case 'orphans/set':
                 state.orphans = requireArray(command, 'orphans');
                 return 'orphans';
-            case 'selection/set':
-                if (command.key !== null && typeof command.key !== 'string') {
-                    throw new TypeError('VoicesV2 command "selection/set" needs a string key or null.');
+            case 'catalogue/set':
+                if (!command.catalogue || typeof command.catalogue !== 'object' ||
+                        Array.isArray(command.catalogue)) {
+                    throw new TypeError('VoicesV2 command "catalogue/set" needs an object "catalogue".');
                 }
-                state.selection.key = command.key;
+                state.catalogue = {
+                    voices: Array.isArray(command.catalogue.voices) ? command.catalogue.voices : [],
+                    counts: command.catalogue.counts || { total: 0, available: 0, unavailable: 0 },
+                    kinds: Array.isArray(command.catalogue.kinds) ? command.catalogue.kinds : [],
+                    unsupportedKinds: command.catalogue.unsupported_kinds ||
+                        command.catalogue.unsupportedKinds || {},
+                    loaded: true,
+                    error: null
+                };
+                return 'catalogue';
+            case 'catalogue/error':
+                state.catalogue = Object.assign({}, state.catalogue, {
+                    loaded: true, error: String(command.error)
+                });
+                return 'catalogue';
+            case 'selection/set':
+                return reduceSelection(command);
+            case 'selection/acceptPending':
+                /* The user chose to switch and lose the draft. Only reachable
+                 * when a switch is actually blocked, so this cannot silently
+                 * discard an edit. */
+                if (!state.selection.blocked || !state.selection.pending) { return 'selection'; }
+                state.selection.key = state.selection.pending;
+                state.selection.pending = null;
+                state.selection.blocked = false;
+                state.draft = createInitialDraft();
+                state.save = createInitialSave();
                 return 'selection';
+            case 'selection/cancelPending':
+                state.selection.pending = null;
+                state.selection.blocked = false;
+                state.save = createInitialSave();
+                return 'selection';
+            case 'draft/choose':
+                return reduceDraftChoice(command.voiceId);
+            case 'draft/clearVoice':
+                return reduceDraftChoice(null, true);
+            case 'draft/discard':
+                state.draft = createInitialDraft();
+                state.save = createInitialSave();
+                return 'draft';
+            case 'draft/reset':
+                state.draft = createInitialDraft();
+                return 'draft';
+            case 'save/start':
+                state.save = { state: 'saving', message: null, code: null, savedAt: null };
+                return 'save';
+            case 'save/succeeded':
+                state.save = { state: 'saved', message: null, code: null, savedAt: Date.now() };
+                return 'save';
+            case 'save/failed':
+                state.save = {
+                    state: 'error',
+                    message: String(command.message),
+                    code: command.code === undefined || command.code === null ? null : String(command.code),
+                    savedAt: null
+                };
+                return 'save';
+            case 'save/conflict':
+                /* A stale snapshot. The draft is deliberately left in place: the
+                 * user chose a voice, and throwing that away for them would lose
+                 * work they can still reapply once they have seen the latest
+                 * state. */
+                state.save = {
+                    state: 'conflict',
+                    message: String(command.message),
+                    code: command.code === undefined || command.code === null
+                        ? 'stale_snapshot' : String(command.code),
+                    savedAt: null
+                };
+                return 'save';
+            case 'save/reset':
+                state.save = createInitialSave();
+                return 'save';
             case 'filters/patch':
                 return reduceFilterPatch(command);
             case 'filters/reset':
@@ -210,6 +324,58 @@
             default:
                 throw new Error('Voices V2 does not implement the command "' + command.type + '".');
         }
+    }
+
+    /* Switching characters is the one navigation that can lose work, so the guard
+     * lives in the reducer rather than in a panel: dispatch is the only writer,
+     * so a guard anywhere else could be bypassed by the next panel that forgets
+     * it. A dirty draft for another character blocks the switch and records it as
+     * pending; the detail view then offers stay / discard / save. */
+    function reduceSelection(command) {
+        if (command.key !== null && typeof command.key !== 'string') {
+            throw new TypeError('VoicesV2 command "selection/set" needs a string key or null.');
+        }
+        var draft = state.draft;
+        var belongsElsewhere = draft.dirty && draft.characterKey && command.key !== draft.characterKey;
+        if (belongsElsewhere) {
+            state.selection.pending = command.key;
+            state.selection.blocked = true;
+            /* A blocked switch is not a save error, so `save` keeps its own state
+             * and only the explanation is cleared. */
+            state.save = Object.assign({}, state.save, { message: null });
+            return 'selection';
+        }
+        state.selection.key = command.key;
+        state.selection.pending = null;
+        state.selection.blocked = false;
+        if (!draft.dirty || draft.characterKey === command.key) {
+            /* A clean draft is not work; forgetting it is not a loss. */
+            state.draft = createInitialDraft();
+            state.save = createInitialSave();
+        }
+        return 'selection';
+    }
+
+    /* The first edit of a character's draft adopts that character; later edits
+     * keep it. Nothing here writes anywhere - a draft is local state until Save
+     * is pressed. */
+    function reduceDraftChoice(voiceId, cleared) {
+        var key = state.selection.key;
+        if (!key) {
+            throw new Error('VoicesV2 cannot draft a voice with no character selected.');
+        }
+        if (typeof voiceId !== 'string' && voiceId !== null) {
+            throw new TypeError('VoicesV2 draft needs a voice id string or null.');
+        }
+        state.draft = {
+            characterKey: key,
+            voiceId: voiceId === undefined ? null : voiceId,
+            cleared: cleared === true,
+            dirty: true
+        };
+        /* Choosing again supersedes whatever the last attempt reported. */
+        state.save = createInitialSave();
+        return 'draft';
     }
 
     /* Filter keys are validated against the allowed vocabulary here rather than
@@ -312,7 +478,8 @@
             scopes: SCOPES.slice(),
             tristates: TRISTATE.slice(),
             priorities: PRIORITIES.slice(),
-            problemModes: PROBLEM_MODES.slice()
+            problemModes: PROBLEM_MODES.slice(),
+            saveStates: SAVE_STATES.slice()
         }
     };
 }(window.VoicesV2 || (window.VoicesV2 = {})));
