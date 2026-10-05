@@ -44,6 +44,8 @@ V2_FILES = (
     "core.js", "state.js", "selectors.js", "api.js",
     "widgets/labels.js", "widgets/states.js",
     "panels/toolbar.js", "panels/characters.js", "panels/detail.js", "panels/assignment.js",
+    "library/filters.js", "library/audio.js", "library/cards.js", "library/panel.js",
+    "library/index.js",
     "lifecycle.js", "index.js",
 )
 INDEX = STATIC / "index.html"
@@ -242,20 +244,21 @@ assert.strictEqual(Object.keys(ctx.window.VoicesV2).length>0,true);
 const ns=ctx.window.VoicesV2;
 assert.deepStrictEqual(Object.keys(ns).sort(),['NAMESPACE','ROOT_DIR','api','canSaveVoice',
   'characterSummary','contains','core','describeError','dispatch','escape','getRoot','getState',
-  'isMounted','labels','lifecycle','mount','notify','notifyFailure','panels','phase','refresh','root',
-  'select','selectors','selectedCharacter','state','states','subscribe','unmount',
-  'visibleCharacters','voiceDraft','voiceSaveState']);
-assert.strictEqual(ns.phase,2);
+  'isMounted','labels','library','libraryFilters','libraryVoices','librarySummary','lifecycle',
+  'mount','notify','notifyFailure','panels','phase','refresh','root','select','selectors',
+  'selectedCharacter','state','states','subscribe','unmount','visibleCharacters','voiceDraft',
+  'voiceSaveState']);
+assert.strictEqual(ns.phase,3);
 assert.strictEqual(ns.root,'voicesv2-tab');
 assert.strictEqual(ns.core.ROOT_ID,'voicesv2-tab');
 assert(Object.isFrozen(ns.api),'the API boundary must not be rewritable');
-assert.deepStrictEqual(Object.keys(ns.api.PATHS),['characters','command','voices']);
+assert.deepStrictEqual(Object.keys(ns.api.PATHS),['characters','favorite','voices','command']);
 for(const name of ['mount','refresh','unmount','isMounted','select','subscribe','dispatch',
   'visibleCharacters','characterSummary','selectedCharacter','voiceDraft','canSaveVoice',
-  'voiceSaveState']){
+  'voiceSaveState','libraryVoices','librarySummary']){
   assert.strictEqual(typeof ns[name],'function',name);
 }
-for(const panel of ['toolbar','charactersPanel','detailPanel','assignmentPanel']){
+for(const panel of ['toolbar','charactersPanel','detailPanel','assignmentPanel','library']){
   assert(ns.panels[panel],'missing panel '+panel);
 }
 """
@@ -448,12 +451,17 @@ class StoreIsolationTests(_NodeTestCase):
         self.run_node(r"""
 const state=ctx.window.VoicesV2.getState();
 assert.deepStrictEqual(Object.keys(state).sort(),
-  ['catalogue','characters','draft','filters','library','meta','orphans','save','selection','ui']);
+  ['catalogue','characters','draft','filters','library','libraryContext','libraryFilters',
+   'librarySearch','librarySelection','librarySort','meta','orphans','preview','save','selection',
+   'ui']);
 assert.deepStrictEqual(Object.keys(state.ui).sort(),['error','loadedAt','loading','mounted']);
 assert.deepStrictEqual(Object.keys(state.selection).sort(),['blocked','key','pending']);
 assert.deepStrictEqual(Object.keys(state.draft).sort(),
   ['characterKey','cleared','dirty','voiceId']);
 assert.deepStrictEqual(Object.keys(state.save).sort(),['code','message','savedAt','state']);
+assert.deepStrictEqual(Object.keys(state.preview).sort(),['error','state','voiceId']);
+assert.deepStrictEqual(Object.keys(state.libraryContext).sort(),
+  ['ageGroup','ageless','gender','key','name']);
 const walk=value=>{if(!value||typeof value!=='object')return;
   assert(!value.nodeType,'a DOM node reached the store');Object.values(value).forEach(walk);};
 walk(state);
@@ -654,6 +662,7 @@ class RouterIsolationTests(unittest.TestCase):
                                 f"Voices V2 registered {path} outside its prefix")
         self.assertEqual({("GET", "/api/voices-v2/characters"),
                           ("GET", "/api/voices-v2/voices"),
+                          ("POST", "/api/voices-v2/favorite"),
                           ("POST", "/api/voices-v2/command")}, self._routes(self.v2))
 
     def test_v2_adds_no_route_to_any_existing_router(self):
@@ -749,9 +758,13 @@ root.style.display='none';
    an unregistered selector, so a panel that reaches for an element V2 does not
    own fails the test instead of quietly returning null in production. */
 const regionNames=['status','live','search','counts','characters','detail','voice-editor',
-  'reset-filters',
+  'reset-filters','library','library-context','library-search','library-count',
+  'library-position','library-previous','library-next','library-random',
+  'library-chips','library-list','library-live',
   'filter-scope','filter-gender','filter-ageGroup','filter-assigned','filter-ready',
-  'filter-personaStatus','filter-priority','filter-problems','filter-sort'];
+  'filter-personaStatus','filter-priority','filter-problems','filter-sort',
+  'library-filter-gender','library-filter-ageGroup','library-filter-kind',
+  'library-filter-availability','library-filter-favorite','library-filter-sort'];
 const regions={};
 const descendants=[];
 regionNames.forEach(name=>{

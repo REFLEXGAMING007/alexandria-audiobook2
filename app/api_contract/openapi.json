@@ -4093,6 +4093,51 @@
         "title": "VoicesV2Counts",
         "type": "object"
       },
+      "VoicesV2FavoriteRequest": {
+        "description": "Explicit set/clear rather than a toggle, so a repeated request cannot\nsilently undo itself and the caller always knows the state it asked for.",
+        "properties": {
+          "favorite": {
+            "title": "Favorite",
+            "type": "boolean"
+          },
+          "voice_id": {
+            "minLength": 1,
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id",
+          "favorite"
+        ],
+        "title": "VoicesV2FavoriteRequest",
+        "type": "object"
+      },
+      "VoicesV2FavoriteResponse": {
+        "properties": {
+          "favorite": {
+            "title": "Favorite",
+            "type": "boolean"
+          },
+          "favorites": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Favorites",
+            "type": "array"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id",
+          "favorite"
+        ],
+        "title": "VoicesV2FavoriteResponse",
+        "type": "object"
+      },
       "VoicesV2Traits": {
         "description": "`speaker_traits.get_speaker_trait_summary` verbatim: the one definition of\na character's settled gender/age, including its state list.",
         "properties": {
@@ -4241,9 +4286,17 @@
         "type": "object"
       },
       "VoicesV2VoiceCatalogue": {
+        "description": "The whole library in one document.\n\nOne request, no paging and no per-voice calls: the catalogue is small enough\nthat the browser filters and sorts it locally, which is what keeps typing\nresponsive. If it ever grows past that, this endpoint is the only thing that\nhas to gain a paging contract - the client-side selectors already operate on\na normalised array and would not change.",
         "properties": {
           "counts": {
             "$ref": "#/components/schemas/VoicesV2VoiceCounts"
+          },
+          "favorite_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Favorite Kinds",
+            "type": "array"
           },
           "kinds": {
             "items": {
@@ -4251,6 +4304,11 @@
             },
             "title": "Kinds",
             "type": "array"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
           },
           "unsupported_kinds": {
             "additionalProperties": {
@@ -4264,6 +4322,13 @@
               "$ref": "#/components/schemas/VoicesV2VoiceOption"
             },
             "title": "Voices",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
             "type": "array"
           }
         },
@@ -4292,7 +4357,7 @@
         "type": "object"
       },
       "VoicesV2VoiceOption": {
-        "description": "One assignable voice. A shape over the manifests the application already\nowns, not a catalogue of its own: the adapter rows come from the same files\n`/api/lora/models` reads and the clone and design rows from the same files\n`/api/clone_voices/list` and `/api/voice_design/list` read.",
+        "description": "One voice in the unified catalogue.\n\nA shape over the manifests the application already owns, not a catalogue of\nits own: the adapter rows come from the same files `/api/lora/models` reads\nand the clone and design rows from the same files `/api/clone_voices/list`\nand `/api/voice_design/list` read.\n\n`gender` / `age_group` carry the best value available and\n`gender_source` / `age_group_source` say whether it was `declared`,\n`inferred` or `unknown`. Keeping the provenance next to the value is what\nlets a later automatic-metadata phase fill in the gaps and a manual\ncorrection phase override them, without either having to guess what the other\nwould have meant.",
         "properties": {
           "adapter_id": {
             "anyOf": [
@@ -4316,8 +4381,23 @@
             ],
             "title": "Adapter Path"
           },
+          "age_group": {
+            "default": "unknown",
+            "title": "Age Group",
+            "type": "string"
+          },
+          "age_group_source": {
+            "default": "unknown",
+            "title": "Age Group Source",
+            "type": "string"
+          },
+          "availability": {
+            "default": "unavailable",
+            "title": "Availability",
+            "type": "string"
+          },
           "available": {
-            "default": true,
+            "default": false,
             "title": "Available",
             "type": "boolean"
           },
@@ -4342,7 +4422,48 @@
             "title": "Favorite",
             "type": "boolean"
           },
+          "favorite_supported": {
+            "default": false,
+            "title": "Favorite Supported",
+            "type": "boolean"
+          },
           "gender": {
+            "default": "unknown",
+            "title": "Gender",
+            "type": "string"
+          },
+          "gender_source": {
+            "default": "unknown",
+            "title": "Gender Source",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "native_id": {
+            "title": "Native Id",
+            "type": "string"
+          },
+          "preview_capable": {
+            "default": false,
+            "title": "Preview Capable",
+            "type": "boolean"
+          },
+          "preview_kind": {
             "anyOf": [
               {
                 "type": "string"
@@ -4351,14 +4472,21 @@
                 "type": "null"
               }
             ],
-            "title": "Gender"
+            "title": "Preview Kind"
           },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url"
           },
-          "name": {
-            "title": "Name",
+          "realisation": {
+            "title": "Realisation",
             "type": "string"
           },
           "ref_audio": {
@@ -4383,6 +4511,28 @@
             ],
             "title": "Ref Text"
           },
+          "sample_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Text"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
           "unavailable_reason": {
             "default": "",
             "title": "Unavailable Reason",
@@ -4395,8 +4545,12 @@
         },
         "required": [
           "voice_id",
+          "native_id",
           "kind",
-          "name"
+          "name",
+          "label",
+          "source",
+          "realisation"
         ],
         "title": "VoicesV2VoiceOption",
         "type": "object"
@@ -10589,9 +10743,48 @@
         "summary": "Run Voice Command"
       }
     },
+    "/api/voices-v2/favorite": {
+      "post": {
+        "description": "Mark or unmark one voice as a favourite.\n\nFavourites belong to voices, not characters, and are stored where the\napplication already keeps them - `voice_library.json` - through the same\nlocked mutator the Voices tab's own favourite toggle uses. A voice starred in\neither place is starred in both.\n\nNot every family can be favourited: the store is a list of adapter ids, so a\nclone or a designed voice has nowhere to be recorded. Those are refused with a\nreason rather than accepted and silently forgotten.",
+        "operationId": "set_favorite_api_voices_v2_favorite_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoicesV2FavoriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoicesV2FavoriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Favorite"
+      }
+    },
     "/api/voices-v2/voices": {
       "get": {
-        "description": "Every voice a single character can be assigned, with its availability.\n\nAssembled from the manifests the application already owns. A voice whose\nfiles are absent is still listed, with a reason, because a character may\nalready point at it and the user needs to see that rather than be offered a\nselector that silently omits their current voice.",
+        "description": "Every voice in the unified Voices V2 library, with its availability.\n\nA voice whose files are absent is still listed, with a reason, because a\ncharacter may already point at it and the user needs to see that rather than\nbe offered a selector that silently omits their current voice.",
         "operationId": "list_assignable_voices_api_voices_v2_voices_get",
         "responses": {
           "200": {

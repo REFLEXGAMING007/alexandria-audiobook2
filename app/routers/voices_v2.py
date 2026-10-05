@@ -36,7 +36,8 @@ from voice_config_store import VoiceConfigConflict
 from voices_v2 import SCHEMA_VERSION
 from voices_v2.character_projection import build_character_projection
 from voices_v2.voice_assignment import (VoiceCommandError, build_voice_catalogue,
-                                        execute_voice_command, plan_voice_command)
+                                        execute_voice_command, plan_voice_command,
+                                        set_voice_favorite)
 
 
 router = APIRouter()
@@ -156,24 +157,63 @@ class VoicesV2Counts(BaseModel):
 
 
 class VoicesV2VoiceOption(BaseModel):
-    """One assignable voice. A shape over the manifests the application already
-    owns, not a catalogue of its own: the adapter rows come from the same files
-    `/api/lora/models` reads and the clone and design rows from the same files
-    `/api/clone_voices/list` and `/api/voice_design/list` read."""
+    """One voice in the unified catalogue.
+
+    A shape over the manifests the application already owns, not a catalogue of
+    its own: the adapter rows come from the same files `/api/lora/models` reads
+    and the clone and design rows from the same files `/api/clone_voices/list`
+    and `/api/voice_design/list` read.
+
+    `gender` / `age_group` carry the best value available and
+    `gender_source` / `age_group_source` say whether it was `declared`,
+    `inferred` or `unknown`. Keeping the provenance next to the value is what
+    lets a later automatic-metadata phase fill in the gaps and a manual
+    correction phase override them, without either having to guess what the other
+    would have meant.
+    """
 
     voice_id: str
+    native_id: str
     kind: str
     name: str
+    label: str
+    source: str
+    realisation: str
     description: Optional[str] = None
-    gender: Optional[str] = None
-    favorite: bool = False
+    sample_text: Optional[str] = None
+    gender: str = "unknown"
+    gender_source: str = "unknown"
+    age_group: str = "unknown"
+    age_group_source: str = "unknown"
+    availability: str = "unavailable"
+    available: bool = False
+    unavailable_reason: str = ""
     downloaded: bool = True
+    favorite: bool = False
+    favorite_supported: bool = False
     adapter_id: Optional[str] = None
     adapter_path: Optional[str] = None
-    available: bool = True
-    unavailable_reason: str = ""
     ref_audio: Optional[str] = None
     ref_text: Optional[str] = None
+    preview_capable: bool = False
+    preview_url: Optional[str] = None
+    preview_kind: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class VoicesV2FavoriteRequest(BaseModel):
+    """Explicit set/clear rather than a toggle, so a repeated request cannot
+    silently undo itself and the caller always knows the state it asked for."""
+
+    voice_id: str = Field(min_length=1)
+    favorite: bool
+
+
+class VoicesV2FavoriteResponse(BaseModel):
+    voice_id: str
+    favorite: bool
+    favorites: List[str] = Field(default_factory=list)
 
 
 class VoicesV2VoiceCounts(BaseModel):
@@ -183,9 +223,21 @@ class VoicesV2VoiceCounts(BaseModel):
 
 
 class VoicesV2VoiceCatalogue(BaseModel):
+    """The whole library in one document.
+
+    One request, no paging and no per-voice calls: the catalogue is small enough
+    that the browser filters and sorts it locally, which is what keeps typing
+    responsive. If it ever grows past that, this endpoint is the only thing that
+    has to gain a paging contract - the client-side selectors already operate on
+    a normalised array and would not change.
+    """
+
+    schema_version: int = SCHEMA_VERSION
     voices: List[VoicesV2VoiceOption] = Field(default_factory=list)
     counts: VoicesV2VoiceCounts = Field(default_factory=VoicesV2VoiceCounts)
     kinds: List[str] = Field(default_factory=list)
+    favorite_kinds: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
     unsupported_kinds: Dict[str, str] = Field(default_factory=dict)
 
 
@@ -255,18 +307,41 @@ async def list_characters():
 
 @router.get("/api/voices-v2/voices", response_model=VoicesV2VoiceCatalogue)
 async def list_assignable_voices():
-    """Every voice a single character can be assigned, with its availability.
+    """Every voice in the unified Voices V2 library, with its availability.
 
-    Assembled from the manifests the application already owns. A voice whose
-    files are absent is still listed, with a reason, because a character may
-    already point at it and the user needs to see that rather than be offered a
-    selector that silently omits their current voice.
+    A voice whose files are absent is still listed, with a reason, because a
+    character may already point at it and the user needs to see that rather than
+    be offered a selector that silently omits their current voice.
     """
     try:
         return await asyncio.to_thread(build_voice_catalogue)
     except VoiceCommandError as error:
         raise HTTPException(status_code=error.status,
                             detail={"code": error.code, "message": error.message}) from error
+
+
+@router.post("/api/voices-v2/favorite", response_model=VoicesV2FavoriteResponse)
+async def set_favorite(request: VoicesV2FavoriteRequest):
+    """Mark or unmark one voice as a favourite.
+
+    Favourites belong to voices, not characters, and are stored where the
+    application already keeps them - `voice_library.json` - through the same
+    locked mutator the Voices tab's own favourite toggle uses. A voice starred in
+    either place is starred in both.
+
+    Not every family can be favourited: the store is a list of adapter ids, so a
+    clone or a designed voice has nowhere to be recorded. Those are refused with a
+    reason rather than accepted and silently forgotten.
+    """
+    try:
+        return await asyncio.to_thread(set_voice_favorite, request.voice_id, request.favorite)
+    except VoiceCommandError as error:
+        raise HTTPException(status_code=error.status,
+                            detail={"code": error.code, "message": error.message}) from error
+    except TimeoutError as error:
+        raise HTTPException(status_code=503,
+                            detail={"code": "busy",
+                                    "message": "The voice library is busy; try again."}) from error
 
 
 @router.post("/api/voices-v2/command", response_model=VoicesV2CommandResponse)

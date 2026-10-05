@@ -199,23 +199,64 @@
         };
     }
 
+    /* One catalogue row, adapted from the wire shape to the shape the library
+     * filters and sorts on.
+     *
+     * The whole VoiceRecord is mapped, not just the fields Phase 2 needed. A
+     * partial map would silently drop `gender_source`, `preview_url` and the
+     * rest, and the library would then filter and render against `undefined`
+     * while looking like it was working - which is exactly the failure the
+     * provenance fields exist to prevent.
+     */
+    function adaptCatalogueVoice(raw) {
+        var entry = (raw && typeof raw === 'object') ? raw : {};
+        return {
+            voiceId: text(entry.voice_id),
+            nativeId: text(entry.native_id),
+            kind: text(entry.kind),
+            name: text(entry.name),
+            label: text(entry.label) || text(entry.name) || 'Unnamed voice',
+            source: text(entry.source) || text(entry.kind),
+            realisation: text(entry.realisation),
+            description: typeof entry.description === 'string' ? entry.description : null,
+            sampleText: typeof entry.sample_text === 'string' ? entry.sample_text : null,
+            // Value plus provenance, both kept. A guess that reads as a fact is
+            // the failure this pairing prevents.
+            gender: text(entry.gender) || 'unknown',
+            genderSource: text(entry.gender_source) || 'unknown',
+            ageGroup: text(entry.age_group) || 'unknown',
+            ageGroupSource: text(entry.age_group_source) || 'unknown',
+            ageless: boolOr(entry.ageless, false),
+            addedAt: numberOrNull(entry.added_at),
+            availability: text(entry.availability)
+                || (entry.available ? 'available' : 'unavailable'),
+            available: boolOr(entry.available, false),
+            unavailableReason: text(entry.unavailable_reason) || '',
+            downloaded: boolOr(entry.downloaded, true),
+            favorite: boolOr(entry.favorite, false),
+            favoriteSupported: boolOr(entry.favorite_supported, false),
+            adapterId: typeof entry.adapter_id === 'string' ? entry.adapter_id : null,
+            adapterPath: typeof entry.adapter_path === 'string' ? entry.adapter_path : null,
+            refAudio: typeof entry.ref_audio === 'string' ? entry.ref_audio : null,
+            refText: typeof entry.ref_text === 'string' ? entry.ref_text : null,
+            previewCapable: boolOr(entry.preview_capable, false),
+            previewUrl: typeof entry.preview_url === 'string' ? entry.preview_url : null,
+            previewKind: typeof entry.preview_kind === 'string' ? entry.preview_kind : null,
+            tags: arrayOf(entry.tags).filter(function (tag) {
+                return typeof tag === 'string' && tag.trim();
+            }),
+            metadata: (entry.metadata && typeof entry.metadata === 'object'
+                && !Array.isArray(entry.metadata)) ? entry.metadata : {}
+        };
+    }
+
     function adaptCatalogue(raw) {
         var source = (raw && typeof raw === 'object') ? raw : {};
         var counts = (source.counts && typeof source.counts === 'object') ? source.counts : {};
+        var unsupported = (source.unsupported_kinds && typeof source.unsupported_kinds === 'object')
+            ? source.unsupported_kinds : {};
         return {
-            voices: arrayOf(source.voices).map(function (voice) {
-                var entry = (voice && typeof voice === 'object') ? voice : {};
-                return {
-                    voiceId: text(entry.voice_id),
-                    kind: text(entry.kind),
-                    name: text(entry.name) || text(entry.voice_id) || 'Unnamed voice',
-                    description: typeof entry.description === 'string' ? entry.description : null,
-                    gender: typeof entry.gender === 'string' ? entry.gender : null,
-                    favorite: boolOr(entry.favorite, false),
-                    available: boolOr(entry.available, true),
-                    unavailableReason: text(entry.unavailable_reason) || ''
-                };
-            }),
+            voices: arrayOf(source.voices).map(adaptCatalogueVoice),
             counts: {
                 total: numberOrNull(counts.total) || 0,
                 available: numberOrNull(counts.available) || 0,
@@ -224,8 +265,14 @@
             kinds: arrayOf(source.kinds).filter(function (kind) {
                 return typeof kind === 'string';
             }),
-            unsupportedKinds: (source.unsupported_kinds && typeof source.unsupported_kinds === 'object')
-                ? source.unsupported_kinds : {}
+            favoriteKinds: arrayOf(source.favorite_kinds).filter(function (kind) {
+                return typeof kind === 'string';
+            }),
+            warnings: arrayOf(source.warnings).filter(function (warning) {
+                return typeof warning === 'string' && warning.trim();
+            }),
+            unsupportedKinds: unsupported,
+            schemaVersion: numberOrNull(source.schema_version)
         };
     }
 

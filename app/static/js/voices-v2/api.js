@@ -19,6 +19,7 @@
     var PATHS = Object.freeze({
         characters: '/api/voices-v2/characters',
         voices: '/api/voices-v2/voices',
+        favorite: '/api/voices-v2/favorite',
         command: '/api/voices-v2/command'
     });
 
@@ -30,6 +31,8 @@
         INVALID_VOICE: 'invalid_voice',
         UNKNOWN_VOICE: 'unknown_voice',
         VOICE_UNAVAILABLE: 'voice_unavailable',
+        FAVORITE_UNSUPPORTED: 'favorite_unsupported',
+        FAVORITE_UNRESOLVED: 'favorite_unresolved',
         UNKNOWN_CHARACTER: 'unknown_character',
         AMBIGUOUS_CHARACTER: 'ambiguous_character',
         CHARACTER_GONE: 'character_no_longer_present',
@@ -58,6 +61,17 @@
      * configuration: the stored entry is read, merged and revalidated on the
      * server, so a client can neither drop a field it does not understand nor
      * write a path the engine could not resolve. */
+    /* Favourites are a property of a voice and are persisted where the
+     * application already keeps them - `voice_library.json` - through the same
+     * locked mutator the Voices tab's own toggle uses. Explicit set rather than a
+     * toggle, so a repeated request cannot silently undo itself. The answer
+     * carries the authoritative list, which the caller applies to the store: the
+     * write is not optimistic, because a star that survives a refused write is
+     * worse than no immediate feedback. */
+    function setFavorite(voiceId, favorite) {
+        return API.post(PATHS.favorite, { voice_id: voiceId, favorite: favorite });
+    }
+
     function sendCommand(command) {
         return API.post(PATHS.command, {
             command: command.command,
@@ -94,6 +108,7 @@
         CODES: CODES,
         fetchCharacters: fetchCharacters,
         fetchVoices: fetchVoices,
+        setFavorite: setFavorite,
         sendCommand: sendCommand,
         refusalCode: refusalCode,
         refusalMessage: refusalMessage

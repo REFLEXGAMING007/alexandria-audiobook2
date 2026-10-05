@@ -35,6 +35,7 @@
     var charactersPanel = namespace.charactersPanel;
     var detailPanel = namespace.detailPanel;
     var assignmentPanel = namespace.assignmentPanel;
+    var libraryIndex = namespace.libraryIndex;
 
     var ACTION_SELECTOR = '[data-voicesv2-action]';
     var listening = false;
@@ -43,7 +44,7 @@
     var stopRenderSubscription = null;
     var renderQueued = false;
 
-    var PANELS = [toolbar, charactersPanel, detailPanel, assignmentPanel];
+    var PANELS = [toolbar, charactersPanel, detailPanel, assignmentPanel, libraryIndex];
 
     /* Published so the set of panels is discoverable in one place: a new panel
      * is added here and nowhere else, and a test can assert the roster. */
@@ -51,7 +52,8 @@
         toolbar: toolbar,
         charactersPanel: charactersPanel,
         detailPanel: detailPanel,
-        assignmentPanel: assignmentPanel
+        assignmentPanel: assignmentPanel,
+        library: libraryIndex
     };
 
     function isMounted() {
@@ -127,6 +129,9 @@
          * be rendered into a node that exists before it looks for it. */
         detailPanel.render(nextState);
         assignmentPanel.render(nextState);
+        /* The library is a peer of the detail panel, not a child: it is rendered
+         * after so it can see the selection the detail just adopted. */
+        libraryIndex.render();
 
         var status = region('status');
         if (status) { status.innerHTML = statusMarkup(nextState); }
@@ -177,6 +182,18 @@
         }
         if (name === 'clear-filters') {
             state.dispatch({ type: 'filters/reset' });
+            return true;
+        }
+        if (name === 'open-library') {
+            /* Opened for the selected character, so the library knows who it is
+             * choosing a voice for. With no selection it is a plain browser. */
+            libraryIndex.openFor(state.select(function (current) {
+                return current.selection.key;
+            }));
+            return true;
+        }
+        if (name === 'open-library-bare') {
+            libraryIndex.open();
             return true;
         }
         /* The blocked-switch prompt offers three answers and resolves none of them
@@ -278,7 +295,11 @@
         if (catalogueInFlight) { return catalogueInFlight; }
         var pending = api.fetchVoices().then(function (payload) {
             catalogueInFlight = null;
-            state.dispatch({ type: 'catalogue/set', catalogue: selectors.adaptCatalogue(payload) });
+            var adapted = selectors.adaptCatalogue(payload);
+            state.dispatch({ type: 'catalogue/set', catalogue: adapted });
+            /* One searchable string per voice, built once per load. A keystroke
+             * then filters an already-built index instead of re-joining strings. */
+            libraryIndex.panel.setCatalogue(adapted.voices);
             render();
             return true;
         }, function (error) {

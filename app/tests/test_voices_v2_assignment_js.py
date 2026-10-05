@@ -21,15 +21,14 @@ import sys
 import unittest
 from pathlib import Path
 
-from tests.test_voices_v2_isolation import _HARNESS, _NodeTestCase, V2_DIR, strip_js_comments
+from tests.test_voices_v2_isolation import (_HARNESS, _NodeTestCase, V2_DIR,
+                                             V2_FILES as V2_FILE_ORDER,
+                                             strip_js_comments)
 
 
-V2_FILES = [
-    "core.js", "state.js", "selectors.js", "api.js",
-    "widgets/labels.js", "widgets/states.js",
-    "panels/toolbar.js", "panels/characters.js", "panels/detail.js", "panels/assignment.js",
-    "lifecycle.js", "index.js",
-]
+# Mirrors V2_FILES in test_voices_v2_isolation.py, which is the one place the
+# load order is declared, so the harness cannot fall behind the page.
+V2_FILES = list(V2_FILE_ORDER)
 
 #: One character with a catalogue voice already saved, one with none, one orphan.
 PAYLOAD = r"""

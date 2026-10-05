@@ -51,6 +51,23 @@
             /* Session state. Lost on reload, never sent to the server. */
             selection: createInitialSelection(),
             filters: createInitialFilters(),
+            /* The Voice Library's own state, kept apart from the character
+             * browser's so neither can read the other's narrowing by accident. */
+            library: createInitialLibrary(),
+            librarySearch: '',
+            libraryFilters: createInitialLibraryFilters(),
+            librarySort: { key: 'name', direction: 'asc' },
+            /* Which character the library is currently reasoning about. Null when
+             * it is open as a plain browser. */
+            libraryContext: { key: null, name: null, gender: null, ageGroup: null,
+                              ageless: false },
+            /* The navigation cursor: which card Previous/Next/Dice act on. This is
+             * deliberately NOT the draft. The draft is the choice that would be
+             * saved; the cursor is only where the user is looking, so moving
+             * through voices never looks like an edit. */
+            librarySelection: { cursor: null },
+            /* One preview at a time, owned by library/audio.js. */
+            preview: { voiceId: null, state: 'idle', error: null },
             /* The one unsaved voice edit. Phase 2 is single-character, so there is
              * deliberately one draft and not a map of them; `dirty` is the only
              * thing that makes it worth protecting. */
@@ -88,9 +105,32 @@
             voices: [],
             counts: { total: 0, available: 0, unavailable: 0 },
             kinds: [],
+            favoriteKinds: [],
+            warnings: [],
             unsupportedKinds: {},
+            schemaVersion: null,
             loaded: false,
             error: null
+        };
+    }
+
+    /* The library is open over the whole catalogue until a character gives it a
+     * subject. */
+    function createInitialLibrary() {
+        return { open: false };
+    }
+
+    /* `context: 'suggested'` narrows by the selected character's traits. It is a
+     * suggestion the user can switch off, never a restriction: a voice with
+     * unknown metadata is never excluded for it. */
+    function createInitialLibraryFilters() {
+        return {
+            gender: 'all',
+            ageGroup: 'all',
+            kind: 'all',
+            availability: 'all',
+            favorite: false,
+            context: 'off'
         };
     }
 
@@ -138,7 +178,14 @@
         return key !== 'sort';
     });
 
-    var SORT_KEYS = ['name', 'lineCount', 'priority', 'voiceStatus', 'voice', 'ready', 'traitOrder'];
+    /* Two sort vocabularies, because they belong to two different panels: the
+     * character browser ranks characters, the library ranks voices. Sharing one
+     * list would force a meaningless option into one of them. */
+    var SORT_KEYS = ['name', 'lineCount', 'priority', 'voiceStatus', 'voice', 'ready',
+                     'traitOrder'];
+
+    var LIBRARY_SORT_KEYS = ['name', 'favorite', 'availability', 'kind', 'gender', 'age',
+                             'recent'];
 
     var SCOPES = ['all', 'characters', 'orphans'];
 
@@ -230,11 +277,24 @@
                     voices: Array.isArray(command.catalogue.voices) ? command.catalogue.voices : [],
                     counts: command.catalogue.counts || { total: 0, available: 0, unavailable: 0 },
                     kinds: Array.isArray(command.catalogue.kinds) ? command.catalogue.kinds : [],
+                    favoriteKinds: Array.isArray(command.catalogue.favorite_kinds)
+                        ? command.catalogue.favorite_kinds
+                        : (command.catalogue.favoriteKinds || []),
+                    warnings: Array.isArray(command.catalogue.warnings)
+                        ? command.catalogue.warnings : [],
                     unsupportedKinds: command.catalogue.unsupported_kinds ||
                         command.catalogue.unsupportedKinds || {},
+                    schemaVersion: typeof command.catalogue.schema_version === 'number'
+                        ? command.catalogue.schema_version : null,
                     loaded: true,
                     error: null
                 };
+                return 'catalogue';
+            case 'catalogue/voices':
+                if (!Array.isArray(command.voices)) {
+                    throw new TypeError('VoicesV2 command "catalogue/voices" needs an array "voices".');
+                }
+                state.catalogue.voices = command.voices;
                 return 'catalogue';
             case 'catalogue/error':
                 state.catalogue = Object.assign({}, state.catalogue, {
@@ -302,6 +362,51 @@
                 return 'save';
             case 'filters/patch':
                 return reduceFilterPatch(command);
+            case 'library/open':
+                return reduceLibraryOpen(command);
+            case 'library/close':
+                state.library.open = false;
+                /* The context is dropped with the panel: leaving it behind would
+                 * silently narrow the next time the library is opened. */
+                state.libraryContext = createInitialLibraryContext();
+                state.librarySelection.cursor = null;
+                return 'library';
+            case 'library/search':
+                state.librarySearch = command.query === null || command.query === undefined
+                    ? '' : String(command.query);
+                return 'librarySearch';
+            case 'library/filters':
+                return reduceLibraryFilterPatch(command.patch);
+            case 'library/sort':
+                if (LIBRARY_SORT_KEYS.indexOf(String(command.key)) < 0) {
+                    throw new Error('Voices V2 cannot sort the library by "' + command.key + '".');
+                }
+                if (['asc', 'desc'].indexOf(String(command.direction)) < 0) {
+                    throw new Error('Voices V2 sort direction must be asc or desc.');
+                }
+                state.librarySort = { key: String(command.key), direction: String(command.direction) };
+                return 'librarySort';
+            case 'library/resetFilters':
+                state.libraryFilters = createInitialLibraryFilters();
+                state.librarySearch = '';
+                return 'libraryFilters';
+            case 'library/cursor':
+                state.librarySelection.cursor = (command.voiceId === undefined)
+                    ? null : command.voiceId;
+                return 'librarySelection';
+            case 'preview/start':
+                state.preview = { voiceId: command.voiceId, state: 'loading', error: null };
+                return 'preview';
+            case 'preview/playing':
+                state.preview = { voiceId: command.voiceId, state: 'playing', error: null };
+                return 'preview';
+            case 'preview/failed':
+                state.preview = { voiceId: command.voiceId, state: 'error',
+                                 error: String(command.error) };
+                return 'preview';
+            case 'preview/stop':
+                state.preview = { voiceId: null, state: 'idle', error: null };
+                return 'preview';
             case 'filters/reset':
                 state.filters = createInitialFilters();
                 return 'filters';
@@ -376,6 +481,77 @@
         /* Choosing again supersedes whatever the last attempt reported. */
         state.save = createInitialSave();
         return 'draft';
+    }
+
+    /* Opening the library always names its subject explicitly. With a character it
+     * prefills the context so the filters have something to suggest; without one
+     * it is a plain browser. Either way the open action records what it decided,
+     * so the panel never has to re-derive it from the selection. */
+    function reduceLibraryOpen(command) {
+        var context = createInitialLibraryContext();
+        if (command.key) {
+            var character = findCharacter(command.key);
+            if (!character) {
+                throw new Error('Voices V2 cannot open the library for "' + command.key + '".');
+            }
+            context = {
+                key: character.key,
+                name: character.name,
+                gender: (character.traits && character.traits.gender) || 'unknown',
+                ageGroup: (character.traits && character.traits.ageGroup) || 'unknown',
+                ageless: !!(character.traits && character.traits.ageless)
+            };
+        }
+        state.libraryContext = context;
+        state.library.open = true;
+        state.librarySelection.cursor = null;
+        return 'library';
+    }
+
+    function findCharacter(key) {
+        var all = state.characters.concat(state.orphans);
+        for (var index = 0; index < all.length; index += 1) {
+            if (all[index].key === key) { return all[index]; }
+        }
+        return null;
+    }
+
+    function createInitialLibraryContext() {
+        return { key: null, name: null, gender: null, ageGroup: null, ageless: false };
+    }
+
+    /* Only the six filters exist, and only these values are accepted, so the
+     * chips the panel renders can never describe a filter that is not applied. */
+    var LIBRARY_FILTER_KEYS = ['gender', 'ageGroup', 'kind', 'availability', 'favorite',
+                                'context'];
+    var AVAILABILITY_MODES = ['all', 'available', 'unavailable'];
+    var CONTEXT_MODES = ['off', 'suggested'];
+
+    function reduceLibraryFilterPatch(patch) {
+        if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+            throw new TypeError('VoicesV2 command "library/filters" needs an object "patch".');
+        }
+        var keys = Object.keys(patch);
+        if (!keys.length) { return 'libraryFilters'; }
+        keys.forEach(function (key) {
+            if (LIBRARY_FILTER_KEYS.indexOf(key) < 0) {
+                throw new Error('Voices V2 has no library filter named "' + key + '".');
+            }
+            if (key === 'favorite' && typeof patch[key] !== 'boolean') {
+                throw new TypeError('VoicesV2 library filter "favorite" needs a boolean.');
+            }
+            var vocabulary = key === 'availability' ? AVAILABILITY_MODES
+                : key === 'context' ? CONTEXT_MODES : null;
+            if (vocabulary && vocabulary.indexOf(String(patch[key])) < 0) {
+                throw new Error('Voices V2 library filter "' + key + '" does not accept "'
+                    + patch[key] + '".');
+            }
+        });
+        keys.forEach(function (key) {
+            state.libraryFilters[key] = key === 'favorite'
+                ? patch[key] : String(patch[key]);
+        });
+        return 'libraryFilters';
     }
 
     /* Filter keys are validated against the allowed vocabulary here rather than
@@ -479,7 +655,12 @@
             tristates: TRISTATE.slice(),
             priorities: PRIORITIES.slice(),
             problemModes: PROBLEM_MODES.slice(),
-            saveStates: SAVE_STATES.slice()
+            saveStates: SAVE_STATES.slice(),
+            libraryFilterKeys: LIBRARY_FILTER_KEYS.slice(),
+            librarySortKeys: LIBRARY_SORT_KEYS.slice(),
+            availabilityModes: AVAILABILITY_MODES.slice(),
+            contextModes: CONTEXT_MODES.slice(),
+            previewStates: ['idle', 'loading', 'playing', 'error']
         }
     };
 }(window.VoicesV2 || (window.VoicesV2 = {})));

@@ -61,8 +61,13 @@ from core import BUILTIN_LORA_DIR, CLONE_VOICES_DIR, DATA_DIR, DESIGNED_VOICES_D
 from core import LORA_MODELS_DIR, LORA_MODELS_MANIFEST, VOICE_CONFIG_PATH
 from utils import safe_load_json
 from voice_manifest import get_adapter_manifest_rows, get_resolved_adapter_ids
+from routers.lora import get_lora_adapter_location_locked
 
 from voices_v2.character_projection import build_character_projection
+from voices_v2 import SCHEMA_VERSION
+from voices_v2.voice_record import (FAVORITE_CAPABLE_KINDS, clone_and_design_preview_url,
+                                   declared_age_group, declared_gender, stated_added_at,
+                                   voice_record)
 
 
 logger = logging.getLogger("AlexandriaUI")
@@ -141,16 +146,35 @@ def _adapter_available(adapter_id: str, is_builtin: bool) -> Tuple[bool, str]:
     return True, ""
 
 
+def _adapter_preview_url(adapter_id: str, is_builtin: bool) -> Optional[str]:
+    """A static URL for an adapter's preview sample, when one is on disk.
+
+    `/lora_models` and `/builtin_lora` are mounted by `app.py`, so this needs no
+    endpoint and no generation. The path is resolved through
+    `get_lora_adapter_location_locked` rather than interpolated, because that is
+    what follows a renamed adapter to its current directory.
+    """
+    try:
+        adapter_dir, url_prefix = get_lora_adapter_location_locked(adapter_id, is_builtin)
+    except (ValueError, OSError):
+        return None
+    if not os.path.isfile(os.path.join(adapter_dir, "preview_sample.wav")):
+        return None
+    return f"{url_prefix}/preview_sample.wav"
+
+
 def _builtin_lora_rows() -> List[Dict[str, Any]]:
     """Built-in adapters, read from the manifest on disk.
 
     Deliberately not `_load_builtin_lora_manifest`, which fetches from Hugging
-    Face with a local fallback. Voices V2 opens this catalogue every time the tab
-    is opened, and an assignment can only ever use an adapter that is already
-    installed - so a browser-facing read has no business making a network call,
-    and the `downloaded` flag it reports comes from the same
-    `is_adapter_downloaded` check either way.
+    Face with a local fallback. The library is opened from a tab click, and an
+    assignment can only ever use an adapter that is already installed - so a
+    browser-facing read has no business making a network call, and the
+    `downloaded` flag it reports comes from the same `is_adapter_downloaded`
+    check either way.
     """
+    from routers.voices import _infer_lora_age, _infer_lora_gender
+
     rows: List[Dict[str, Any]] = []
     for entry in _load_manifest(BUILTIN_LORA_MANIFEST):
         if not isinstance(entry, dict):
@@ -163,21 +187,28 @@ def _builtin_lora_rows() -> List[Dict[str, Any]]:
         available, reason = _adapter_available(adapter_id, True)
         if not downloaded:
             available, reason = False, "This built-in voice has not been downloaded."
-        rows.append({
-            "voice_id": voice_id(KIND_BUILTIN_LORA, adapter_id),
-            "kind": KIND_BUILTIN_LORA,
-            "name": _text(entry.get("name")) or adapter_id,
-            "description": _text(entry.get("description")),
-            "gender": _text(entry.get("gender")),
-            "favorite": False,
-            "downloaded": downloaded,
-            "adapter_id": adapter_id,
-            "adapter_path": f"{BUILTIN_NAMESPACE}/{adapter_id}",
-            "available": available,
-            "unavailable_reason": reason,
-            "ref_audio": None,
-            "ref_text": None,
-        })
+        rows.append(voice_record(
+            voice_id=voice_id(KIND_BUILTIN_LORA, adapter_id),
+            native_id=adapter_id,
+            kind=KIND_BUILTIN_LORA,
+            name=_text(entry.get("name")) or adapter_id,
+            description=_text(entry.get("description")),
+            sample_text=None,
+            gender_declared=declared_gender(entry),
+            gender_inferred=_infer_lora_gender(entry),
+            age_declared=declared_age_group(entry),
+            age_inferred=_infer_lora_age(entry),
+            available=available,
+            unavailable_reason=reason,
+            downloaded=downloaded,
+            favorite=False,
+            adapter_id=adapter_id,
+            adapter_path=f"{BUILTIN_NAMESPACE}/{adapter_id}",
+            ref_audio=None,
+            ref_text=None,
+            preview_url=_adapter_preview_url(adapter_id, True),
+            metadata={"epochs": entry.get("epochs"), "sample_count": entry.get("sample_count")},
+        ))
     return rows
 
 
@@ -185,15 +216,17 @@ def _lora_rows() -> Tuple[List[Dict[str, Any]], List[str]]:
     """User-trained adapter rows, plus any warning the manifests produced.
 
     `get_adapter_manifest_rows` validates adapter ids and raises on a malformed
-    one. Letting that escape would take down voice *assignment* for the clone and
-    design voices too, because they share this one catalogue read - a single
-    hand-edited manifest row would break a part of the feature it has nothing to
-    do with. So the adapters are reported as unreadable and the other families
-    still work.
+    one. Letting that escape would take down voice *assignment* and the library
+    for the clone and design families too, because they share this one catalogue
+    read - a single hand-edited manifest row would break parts of the feature it
+    has nothing to do with. So the adapters are reported as unreadable and the
+    other families still work.
     """
+    from routers.voices import _infer_lora_age, _infer_lora_gender
+
     warnings: List[str] = []
     unreadable = ("The LoRA voice list could not be read, so LoRA voices cannot be "
-                  "assigned. Clone and designed voices are unaffected.")
+                  "assigned or browsed. Clone and designed voices are unaffected.")
     try:
         favorites = set(get_resolved_adapter_ids(
             LORA_MODELS_DIR, _load_voice_library().get("favorites") or []))
@@ -208,21 +241,34 @@ def _lora_rows() -> Tuple[List[Dict[str, Any]], List[str]]:
     for entry in entries:
         adapter_id = str(entry["id"])
         available, reason = _adapter_available(adapter_id, False)
-        rows.append({
-            "voice_id": voice_id(KIND_LORA, adapter_id),
-            "kind": KIND_LORA,
-            "name": _text(entry.get("name")) or adapter_id,
-            "description": _text(entry.get("description")),
-            "gender": _text(entry.get("gender")),
-            "favorite": adapter_id in favorites,
-            "downloaded": True,
-            "adapter_id": adapter_id,
-            "adapter_path": f"{USER_NAMESPACE}/{adapter_id}",
-            "available": available,
-            "unavailable_reason": reason,
-            "ref_audio": None,
-            "ref_text": None,
-        })
+        rows.append(voice_record(
+            voice_id=voice_id(KIND_LORA, adapter_id),
+            native_id=adapter_id,
+            kind=KIND_LORA,
+            name=_text(entry.get("name")) or adapter_id,
+            description=_text(entry.get("description")) or _text(entry.get("voice_profile")),
+            sample_text=None,
+            gender_declared=declared_gender(entry),
+            gender_inferred=_infer_lora_gender(entry),
+            age_declared=declared_age_group(entry),
+            age_inferred=_infer_lora_age(entry),
+            available=available,
+            unavailable_reason=reason,
+            downloaded=True,
+            favorite=adapter_id in favorites,
+            adapter_id=adapter_id,
+            adapter_path=f"{USER_NAMESPACE}/{adapter_id}",
+            ref_audio=None,
+            ref_text=None,
+            preview_url=_adapter_preview_url(adapter_id, False),
+            metadata={
+                "epochs": entry.get("epochs"),
+                "sample_count": entry.get("sample_count"),
+                "final_loss": entry.get("final_loss"),
+                "voice_features": entry.get("voice_features"),
+                "added_at": stated_added_at(entry, "retrained_at", "created"),
+            },
+        ))
     return rows, warnings
 
 
@@ -237,26 +283,41 @@ def _clone_rows() -> List[Dict[str, Any]]:
             continue
         relative = f"clone_voices/{filename}"
         present = os.path.isfile(os.path.join(DATA_DIR, relative))
-        rows.append({
-            "voice_id": voice_id(KIND_CLONE, native_id),
-            "kind": KIND_CLONE,
-            "name": _text(entry.get("name")) or native_id,
-            # An uploaded clip is required to carry its exact transcript, so a
-            # row without one cannot be assigned and must not be offered as if
-            # it could.
-            "description": _text(entry.get("ref_text")),
-            "gender": None,
-            "favorite": False,
-            "downloaded": True,
-            "adapter_id": None,
-            "adapter_path": None,
-            "available": present and bool(_text(entry.get("ref_text"))),
-            "unavailable_reason": "" if present and _text(entry.get("ref_text"))
-                                   else ("The reference recording is missing." if not present
-                                         else "The reference recording has no transcript."),
-            "ref_audio": relative,
-            "ref_text": _text(entry.get("ref_text")),
-        })
+        transcript = _text(entry.get("ref_text"))
+        assignable = present and bool(transcript)
+        rows.append(voice_record(
+            voice_id=voice_id(KIND_CLONE, native_id),
+            native_id=native_id,
+            kind=KIND_CLONE,
+            name=_text(entry.get("name")) or native_id,
+            # An uploaded clip is required to carry its exact transcript, so a row
+            # without one cannot be assigned and must not be offered as if it
+            # could. The transcript is also the most useful thing to search on.
+            description=transcript,
+            sample_text=transcript,
+            # A clip has no stated gender. Saying "unknown" is the honest answer,
+            # and the library still lets the voice be chosen.
+            gender_declared=None,
+            gender_inferred=None,
+            age_declared=None,
+            age_inferred=None,
+            available=assignable,
+            unavailable_reason="" if assignable else (
+                "The reference recording is missing." if not present
+                else "The reference recording has no transcript."),
+            downloaded=True,
+            favorite=False,
+            adapter_id=None,
+            adapter_path=None,
+            ref_audio=relative,
+            ref_text=transcript,
+            preview_url=clone_and_design_preview_url("clone_voices", filename, CLONE_VOICES_DIR),
+            metadata={
+                "source_title": _text(entry.get("source_title")),
+                "rights_confirmed": entry.get("rights_confirmed"),
+                "added_at": stated_added_at(entry, "imported_at"),
+            },
+        ))
     return rows
 
 
@@ -270,24 +331,34 @@ def _design_rows() -> List[Dict[str, Any]]:
             continue
         description = _text(entry.get("description"))
         filename = _text(entry.get("filename"))
-        relative = f"designed_voices/{filename}" if filename else None
-        rows.append({
-            "voice_id": voice_id(KIND_DESIGN, native_id),
-            "kind": KIND_DESIGN,
-            "name": _text(entry.get("name")) or native_id,
-            # The description IS the voice: VoiceDesign synthesises from prose,
-            # which is why this is the whole payload.
-            "description": description,
-            "gender": None,
-            "favorite": False,
-            "downloaded": True,
-            "adapter_id": None,
-            "adapter_path": None,
-            "available": bool(description),
-            "unavailable_reason": "" if description else "This designed voice has no description.",
-            "ref_audio": relative,
-            "ref_text": _text(entry.get("sample_text")),
-        })
+        # The description IS the voice: VoiceDesign synthesises from prose, which
+        # is why it is both the payload and the most useful thing to search on.
+        rows.append(voice_record(
+            voice_id=voice_id(KIND_DESIGN, native_id),
+            native_id=native_id,
+            kind=KIND_DESIGN,
+            name=_text(entry.get("name")) or native_id,
+            description=description,
+            sample_text=_text(entry.get("sample_text")),
+            # A designed voice states no gender or age. Unknown is the answer, and
+            # the library keeps it selectable rather than hiding it.
+            gender_declared=None,
+            gender_inferred=None,
+            age_declared=None,
+            age_inferred=None,
+            available=bool(description),
+            unavailable_reason="" if description
+                                else "This designed voice has no description.",
+            downloaded=True,
+            favorite=False,
+            adapter_id=None,
+            adapter_path=None,
+            ref_audio=f"designed_voices/{filename}" if filename else None,
+            ref_text=_text(entry.get("sample_text")),
+            preview_url=clone_and_design_preview_url(
+                "designed_voices", filename, DESIGNED_VOICES_DIR),
+            metadata={},
+        ))
     return rows
 
 
@@ -307,6 +378,7 @@ def build_voice_catalogue() -> Dict[str, Any]:
     rows.sort(key=lambda row: (row["kind"] != KIND_LORA, row["kind"] != KIND_BUILTIN_LORA,
                                (row["name"] or "").lower()))
     return {
+        "schema_version": SCHEMA_VERSION,
         "voices": rows,
         "counts": {
             "total": len(rows),
@@ -314,6 +386,9 @@ def build_voice_catalogue() -> Dict[str, Any]:
             "unavailable": sum(1 for row in rows if not row["available"]),
         },
         "kinds": list(ASSIGNABLE_KINDS),
+        # Which families have anywhere to persist a favourite. The library uses
+        # this to explain a missing star rather than rendering a dead control.
+        "favorite_kinds": list(FAVORITE_CAPABLE_KINDS),
         "warnings": warnings,
         "unsupported_kinds": {
             "ensemble": "An ensemble voice speaks for several characters at once, "
@@ -325,13 +400,17 @@ def build_voice_catalogue() -> Dict[str, Any]:
     }
 
 
-def find_catalogue_voice(voice_id: str) -> Dict[str, Any]:
+def find_catalogue_voice(voice_id: str, require_available: bool = True) -> Dict[str, Any]:
     """The catalogue row for an id, re-validated against the filesystem.
 
     The catalogue is rebuilt rather than trusted: between reading it and saving,
     an adapter can be deleted or a clone manifest rewritten, and a save that
     wrote a path which no longer resolves would be indistinguishable from a
     working assignment.
+
+    `require_available=False` is for operations that are about the voice's
+    identity rather than its usability - favouriting an adapter whose files have
+    gone, so the user can still find it later.
     """
     kind, native = split_voice_id(voice_id)
     if kind is None:
@@ -340,13 +419,63 @@ def find_catalogue_voice(voice_id: str) -> Dict[str, Any]:
         raise VoiceCommandError("invalid_voice", "That voice id is not recognised.")
     for row in build_voice_catalogue()["voices"]:
         if row["voice_id"] == voice_id:
-            if not row["available"]:
+            if require_available and not row["available"]:
                 raise VoiceCommandError("voice_unavailable",
                                         f"{row['name']} cannot be assigned: "
                                         f"{row['unavailable_reason'] or 'it is unavailable.'}",
                                         status=409)
             return row
     raise VoiceCommandError("unknown_voice", f"No voice is registered as '{native}'.", status=404)
+
+
+def set_voice_favorite(voice_id: str, favorite: bool) -> Dict[str, Any]:
+    """Star or unstar one voice, in the application's existing favourite store.
+
+    Favourites are not a Voices V2 invention: `voice_library.json` already holds
+    a `favorites` list and `POST /api/voice_library/favorites/{adapter_id}` already
+    toggles it under the library lock. V2 reuses that store and that mutator
+    rather than adding a second one, so a voice starred in the Voices tab is
+    starred here too.
+
+    Setting is explicit rather than a toggle, so a double request cannot silently
+    undo itself, and the caller always knows what state it asked for.
+
+    Synchronous by design: it does file work, so the router runs it in a worker
+    thread. Returning a coroutine from a function the tests and the router both
+    treat as a plain call is how a write ends up silently not happening.
+    """
+    record = find_catalogue_voice(voice_id, require_available=False)
+    if not record["favorite_supported"]:
+        raise VoiceCommandError(
+            "favorite_unsupported",
+            f"A {record['source']} cannot be marked as a favourite. Favourites are "
+            f"stored for LoRA voices only.", status=409)
+
+    from routers.voice_library import _mutate_voice_library
+    from voice_manifest import get_resolved_adapter_id_mapping
+
+    native = record["native_id"]
+
+    def mutate(library):
+        stored = list(library.get("favorites") or [])
+        try:
+            identities = get_resolved_adapter_id_mapping(LORA_MODELS_DIR, [*stored, native])
+        except ValueError as error:
+            # An unresolved alias map means the manifest needs recovery. Refusing
+            # is right: writing a favourite now could pin an id that is about to
+            # be renamed.
+            raise VoiceCommandError("favorite_unresolved", str(error), status=409) from error
+        resolved = {identities[name] for name in stored}
+        current = identities[native]
+        if favorite:
+            resolved.add(current)
+        else:
+            resolved.discard(current)
+        library["favorites"] = sorted(resolved)
+        return {"voice_id": voice_id, "favorite": favorite,
+                "favorites": library["favorites"]}
+
+    return _mutate_voice_library(mutate)
 
 
 # ── Character identity ───────────────────────────────────────────────────────

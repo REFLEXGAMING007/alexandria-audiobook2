@@ -19,15 +19,16 @@ import sys
 import unittest
 from pathlib import Path
 
-from tests.test_voices_v2_isolation import _HARNESS, _NodeTestCase, V2_DIR, strip_js_comments
+from tests.test_voices_v2_isolation import (_HARNESS, _NodeTestCase, V2_DIR,
+                                             V2_FILES as V2_FILE_ORDER,
+                                             strip_js_comments)
 
 
 def _harness():
-    return _HARNESS % {"files": repr([
-        "core.js", "state.js", "selectors.js", "api.js",
-        "widgets/labels.js", "widgets/states.js",
-        "panels/toolbar.js", "panels/characters.js", "panels/detail.js",
-        "lifecycle.js", "index.js"])}, str(V2_DIR)
+    # Mirrors V2_FILES in test_voices_v2_isolation.py, which is the one place the
+    # load order is declared. Deriving it here keeps the harness honest when a
+    # file is added, instead of leaving it to be updated twice.
+    return _HARNESS % {"files": repr(V2_FILE_ORDER)}, str(V2_DIR)
 
 
 class BrowserTestCase(_NodeTestCase):

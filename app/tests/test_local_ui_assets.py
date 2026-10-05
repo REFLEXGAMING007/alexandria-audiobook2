@@ -31,7 +31,7 @@ class Resources(HTMLParser):
 class LocalUiAssetTests(unittest.TestCase):
     def test_page_dependencies_are_local_and_integrity_matches_served_bytes(self):
         resources = Resources((STATIC / 'index.html').read_text()).resources
-        self.assertEqual(23, len(resources))
+        self.assertEqual(28, len(resources))
         app = FastAPI()
         app.mount('/static', StaticFiles(directory=STATIC), name='static')
         with TestClient(app) as client:

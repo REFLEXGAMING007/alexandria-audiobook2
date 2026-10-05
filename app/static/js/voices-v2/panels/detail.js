@@ -113,6 +113,11 @@
             fields.push(row('Ensemble members', value(String(voice.ensembleMembers))));
         }
         return section('Current voice', fields.join(''), 'voice')
+            + '<div class="vv2-editor-actions">'
+            + '<button type="button" class="btn btn-sm btn-outline-primary"'
+            + ' data-voicesv2-action="open-library">Browse voice library</button>'
+            + '<span class="small vv2-muted">or choose a voice below</span>'
+            + '</div>'
             + '<div data-voicesv2-region="voice-editor" class="vv2-editor-region"></div>';
     }
 

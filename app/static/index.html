@@ -705,6 +705,38 @@
         #voicesv2-tab .vv2-save-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
         #voicesv2-tab .vv2-save-actions :disabled { cursor: not-allowed; }
         #voicesv2-tab .vv2-save-state { font-size: 0.8125rem; }
+        #voicesv2-tab .vv2-editor-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin-top: 0.6rem; }
+        #voicesv2-tab .vv2-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+        #voicesv2-tab .vv2-library { margin-top: 1rem; }
+        #voicesv2-tab .vv2-library-toolbar { display: grid; gap: 0.6rem; }
+        #voicesv2-tab .vv2-library-search-row { display: block; }
+        #voicesv2-tab .vv2-library-filter-row { display: grid; gap: 0.4rem; grid-template-columns: minmax(0, 1fr); }
+        #voicesv2-tab .vv2-filter-field { display: grid; gap: 0.15rem; }
+        #voicesv2-tab .vv2-library-count-row { display: grid; gap: 0.4rem; align-items: center; }
+        #voicesv2-tab .vv2-library-count { font-variant-numeric: tabular-nums; }
+        #voicesv2-tab .vv2-library-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+        #voicesv2-tab .vv2-library-context { display: grid; gap: 0.5rem; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); }
+        #voicesv2-tab .vv2-library-context:empty { display: none; }
+        #voicesv2-tab .vv2-library-list { margin-top: 0.75rem; }
+        #voicesv2-tab .vv2-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+        #voicesv2-tab .vv2-chips:empty { display: none; }
+        #voicesv2-tab .vv2-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.3rem 0.15rem 0.5rem; border: 1px solid var(--border-color); border-radius: 1rem; font-size: 0.8125rem; }
+        #voicesv2-tab .vv2-chip-remove { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0.15rem 0.25rem; }
+        #voicesv2-tab .vv2-chips-clear { font-size: 0.8125rem; }
+        #voicesv2-tab .vv2-voice-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+        #voicesv2-tab .vv2-voice-card { display: grid; gap: 0.3rem; padding: 0.6rem 0.7rem; border: 1px solid var(--border-color); border-left: 3px solid transparent; border-radius: 0.2rem; }
+        #voicesv2-tab .vv2-voice-card.is-cursor { border-left-color: var(--accent); }
+        #voicesv2-tab .vv2-voice-card.is-selected { border-left-color: var(--success); background: var(--bg-card-header); }
+        #voicesv2-tab .vv2-voice-card.is-unavailable { opacity: 0.75; }
+        #voicesv2-tab .vv2-voice-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem; }
+        #voicesv2-tab .vv2-voice-name { font-weight: 600; overflow-wrap: anywhere; }
+        #voicesv2-tab .vv2-voice-meta { font-size: 0.8125rem; color: var(--text-muted); }
+        #voicesv2-tab .vv2-voice-description { font-size: 0.8125rem; margin: 0; max-height: 4.5rem; overflow: hidden; overflow-wrap: anywhere; }
+        #voicesv2-tab .vv2-voice-reason, #voicesv2-tab .vv2-voice-selected-note { font-size: 0.8125rem; margin: 0; text-decoration: underline; text-underline-offset: 2px; }
+        #voicesv2-tab .vv2-voice-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.2rem; }
+        #voicesv2-tab .vv2-voice-actions :is(button) { min-height: 2rem; }
+        #voicesv2-tab .vv2-provenance { color: var(--text-muted); }
+        #voicesv2-tab .vv2-library-state { margin: 0; }
         #voicesv2-tab .vv2-detail-title { font-size: 0.9375rem; margin-bottom: 0.5rem; }
         #voicesv2-tab .vv2-fields { display: grid; gap: 0.35rem; margin: 0; }
         #voicesv2-tab .vv2-field { display: grid; gap: 0.1rem; grid-template-columns: minmax(0, 1fr); }
@@ -734,6 +766,12 @@
             #voicesv2-tab .vv2-list-region { max-height: 70vh; }
             #voicesv2-tab .vv2-field { grid-template-columns: minmax(7rem, 12rem) minmax(0, 1fr); gap: 0.5rem; }
             #voicesv2-tab .vv2-field-label { padding-top: 0.1rem; }
+            #voicesv2-tab .vv2-library-filter-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+            #voicesv2-tab .vv2-library-count-row { grid-template-columns: auto minmax(0, 1fr); gap: 0.75rem; }
+            #voicesv2-tab .vv2-library-search-row { max-width: 28rem; }
+            /* The library sits beside the character detail at lg, so browsing a
+               voice and the character it is for stay on one screen. */
+            #voicesv2-tab .vv2-library-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); }
         }
         /* ── Voices V2 (end) ─────────────────────────────────────────────── */
     </style>
@@ -1864,6 +1902,62 @@
                     <div class="card-body" data-voicesv2-region="detail"></div>
                 </section>
             </div>
+            <!-- Voices V2 Voice Library. Its controls are static markup so
+                 typing keeps the caret and the selection; only the context
+                 banner, the filter chips, the counts and the card list are
+                 rewritten. Mobile-first: search, filters, sort, count, cards. -->
+            <section class="card vv2-card vv2-library" hidden aria-label="Voice library">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h4 class="m-0"><i class="fas fa-compact-disc me-2"></i>Voice Library</h4>
+                    <span class="small text-muted vv2-live" role="status" aria-live="polite" aria-atomic="true" data-voicesv2-region="library-live"></span>
+                </div>
+                <div class="card-body" data-voicesv2-region="library">
+                    <div class="vv2-library-context" data-voicesv2-region="library-context" role="status"></div>
+                    <div class="vv2-library-toolbar">
+                        <div class="vv2-library-search-row">
+                            <label class="vv2-sr-only" for="voicesv2-library-search">Search voices</label>
+                            <input type="search" class="form-control form-control-sm" id="voicesv2-library-search" data-voicesv2-region="library-search" placeholder="Search name, description, type or gender" autocomplete="off">
+                        </div>
+                        <div class="vv2-library-filter-row">
+                            <span class="vv2-filter-field">
+                                <label class="form-label vv2-label" for="voicesv2-library-filter-gender">Gender</label>
+                                <select class="form-select form-select-sm" id="voicesv2-library-filter-gender" data-voicesv2-region="library-filter-gender"></select>
+                            </span>
+                            <span class="vv2-filter-field">
+                                <label class="form-label vv2-label" for="voicesv2-library-filter-age">Age</label>
+                                <select class="form-select form-select-sm" id="voicesv2-library-filter-age" data-voicesv2-region="library-filter-ageGroup"></select>
+                            </span>
+                            <span class="vv2-filter-field">
+                                <label class="form-label vv2-label" for="voicesv2-library-filter-kind">Type</label>
+                                <select class="form-select form-select-sm" id="voicesv2-library-filter-kind" data-voicesv2-region="library-filter-kind"></select>
+                            </span>
+                            <span class="vv2-filter-field">
+                                <label class="form-label vv2-label" for="voicesv2-library-filter-availability">Availability</label>
+                                <select class="form-select form-select-sm" id="voicesv2-library-filter-availability" data-voicesv2-region="library-filter-availability"></select>
+                            </span>
+                            <span class="vv2-filter-field">
+                                <label class="form-label vv2-label" for="voicesv2-library-filter-favorite">Favourites</label>
+                                <select class="form-select form-select-sm" id="voicesv2-library-filter-favorite" data-voicesv2-region="library-filter-favorite"></select>
+                            </span>
+                            <span class="vv2-filter-field">
+                                <label class="form-label vv2-label" for="voicesv2-library-filter-sort">Sort by</label>
+                                <select class="form-select form-select-sm" id="voicesv2-library-filter-sort" data-voicesv2-region="library-filter-sort"></select>
+                            </span>
+                        </div>
+                        <div class="vv2-library-count-row">
+                            <span class="vv2-library-count" role="status" aria-live="polite" data-voicesv2-region="library-count"></span>
+                            <span class="vv2-library-nav">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-voicesv2-region="library-previous" data-voicesv2-action="library-previous">Previous</button>
+                                <span class="small vv2-muted" data-voicesv2-region="library-position">No voices</span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-voicesv2-region="library-next" data-voicesv2-action="library-next">Next</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-voicesv2-region="library-random" data-voicesv2-action="library-random">Random</button>
+                            </span>
+                        </div>
+                        <div class="vv2-chips" data-voicesv2-region="library-chips"></div>
+                    </div>
+                    <div class="vv2-library-list" data-voicesv2-region="library-list"></div>
+                </div>
+            </section>
         </div>
 
         <!-- Designer Tab -->
@@ -3012,9 +3106,9 @@
     <!-- Voices V2: ordered classic scripts, same rules as the app-* files. The
          bootstrap (index.js) must come last, and every file must come after the
          ones it reads: core -> state -> selectors -> api -> widgets -> panels
-         -> lifecycle -> index. All of them sit before app-reports.js because
-         restoreTab() runs at the end of that file and may select this tab on
-         load, which requires window.VoicesV2 to already exist. -->
+         -> library -> lifecycle -> index. All of them sit before app-reports.js
+         because restoreTab() runs at the end of that file and may select this
+         tab on load, which requires window.VoicesV2 to already exist. -->
     <script src="/static/js/voices-v2/core.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/state.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/selectors.js?v=__APP_BUILD__"></script>
@@ -3025,6 +3119,11 @@
     <script src="/static/js/voices-v2/panels/characters.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/panels/detail.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/panels/assignment.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/library/filters.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/library/audio.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/library/cards.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/library/panel.js?v=__APP_BUILD__"></script>
+    <script src="/static/js/voices-v2/library/index.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/lifecycle.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/index.js?v=__APP_BUILD__"></script>
     <script src="/static/js/app-reports.js?v=__APP_BUILD__"></script>

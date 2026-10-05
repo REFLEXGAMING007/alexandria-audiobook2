@@ -26,7 +26,7 @@
     var selectors = namespace.selectors;
     var lifecycle = namespace.lifecycle;
 
-    namespace.phase = 2;
+    namespace.phase = 3;
     namespace.root = core.ROOT_ID;
 
     namespace.mount = lifecycle.mount;
@@ -52,6 +52,14 @@
     namespace.voiceDraft = selectors.selectDraft;
     namespace.canSaveVoice = selectors.selectCanSave;
     namespace.voiceSaveState = selectors.selectSaveState;
+
+    /* The Voice Library is a peer of the character browser, so its surface is
+     * published too: opening it, closing it and choosing from it are all things
+     * an external caller legitimately needs, and none of them should require
+     * reaching into the panel modules. */
+    namespace.library = namespace.libraryIndex;
+    namespace.libraryVoices = namespace.libraryIndex.filters.selectFiltered;
+    namespace.librarySummary = namespace.libraryIndex.filters.selectSummary;
 
     var root = core.getRoot();
     if (root && root.style.display === 'block' && !lifecycle.isMounted()) {

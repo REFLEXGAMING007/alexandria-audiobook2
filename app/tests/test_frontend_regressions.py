@@ -68,9 +68,12 @@ class FrontendJsSplitTests(unittest.TestCase):
         # and folding V2 in would let V2 source satisfy assertions written
         # about the existing app.
         expected = ("core.js", "state.js", "selectors.js", "api.js",
-                   "widgets/labels.js", "widgets/states.js",
-                   "panels/toolbar.js", "panels/characters.js", "panels/detail.js", "panels/assignment.js",
-                   "lifecycle.js", "index.js")
+                    "widgets/labels.js", "widgets/states.js",
+                    "panels/toolbar.js", "panels/characters.js", "panels/detail.js",
+                    "panels/assignment.js",
+                    "library/filters.js", "library/audio.js", "library/cards.js",
+                    "library/panel.js", "library/index.js",
+                    "lifecycle.js", "index.js")
         html = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
         positions = []
         for name in expected:
