@@ -252,12 +252,23 @@ def _require_script_speaker(speaker):
 
 
 @router.get("/api/voices")
-async def get_voices():
-    return await asyncio.to_thread(_ensure_voice_listing)
+async def get_voices(expand_states: bool = False):
+    return await asyncio.to_thread(_ensure_voice_listing, expand_states)
 
 
-def get_voice_rows(script_data, voice_config):
-    """Build one backend eligibility/roster view for legacy and guarded reads."""
+def get_voice_rows(script_data, voice_config, expand_states=False):
+    """Build one backend eligibility/roster view for legacy and guarded reads.
+
+    `expand_states` replaces a character with several settled states by ONE ROW
+    PER STATE (Voices V3). It is opt-in because the legacy Voices tab reads this
+    same endpoint and must keep seeing one row per character.
+
+    A state row carries both identities deliberately:
+      - `row_key`  "MARO#adult"  unique, for the DOM, the store and the save map
+      - `speaker`  "MARO"        what the API is actually called with
+    Keying the store or the save payload by `speaker` alone would collide across a
+    character's states and silently drop all but one.
+    """
     roster = sorted({name for entry in script_data if (name := get_script_speaker(entry))})
     lines = {name: [] for name in roster}
     for entry in script_data:
@@ -266,22 +277,61 @@ def get_voice_rows(script_data, voice_config):
             lines[name].append(entry)
     rows = []
     for name in roster:
-        row = {"name": name, "config": voice_config.get(name, {}),
-               "persona_pending": not voice_is_set(voice_config.get(name))}
+        entry = voice_config.get(name, {})
+        traits = get_speaker_trait_summary(lines[name])
+        states = (traits or {}).get("states") or []
+        base_row = {"name": name, "row_key": name, "speaker": name,
+                    "config": entry,
+                    "persona_pending": not voice_is_set(entry)}
         # Per-line gender/age from pass 2, only when the run asked for them, so
         # a book generated without the switch gets exactly the old rows.
-        traits = get_speaker_trait_summary(lines[name])
         if traits:
-            row["traits"] = traits
-        rows.append(row)
+            base_row["traits"] = traits
+
+        if not (expand_states and len(states) > 1):
+            rows.append(base_row)
+            continue
+
+        # One settled state, or none, is not a state split: the character IS the
+        # row, exactly as the legacy tab shows it.
+        timeline = get_state_timeline(script_data).get(name, [])
+        starts = [point["from_entry"] for point in timeline]
+        for position, state in enumerate(states):
+            age_group = state.get("age_group") or ""
+            if age_group == "unknown":
+                continue
+            saved = (entry.get("versions") or {}).get(age_group)
+            from_entry = starts[position] if position < len(starts) else None
+            to_entry = starts[position + 1] if position + 1 < len(starts) else None
+            rows.append({
+                **base_row,
+                "row_key": f"{name}#{age_group}",
+                "speaker": name,
+                "age_group": age_group,
+                "state_gender": state.get("gender") or "",
+                "from_entry": from_entry,
+                "to_entry": to_entry,
+                # A state row shows ITS OWN saved version. With no version it
+                # deliberately gets an empty entry rather than the character's
+                # base config: the base is usually a placeholder voice (MARO's is
+                # the `Aiden` default), and a placeholder that looks like a real
+                # voice can be saved by accident.
+                "config": dict(saved) if isinstance(saved, dict) else {},
+                "has_version": isinstance(saved, dict),
+                # Approval and readiness stay character level, so the row keeps
+                # the character's own values rather than inventing per-state ones.
+                "persona_status": entry.get("persona_status", "unreviewed"),
+                "voice_status": entry.get("voice_status", "unassigned"),
+                "ready": bool(entry.get("ready")),
+            })
     return rows
 
 
-def _ensure_voice_listing():
+def _ensure_voice_listing(expand_states: bool = False):
     with ensure_book_state(os.path.dirname(SCRIPT_PATH)):
         script_data = safe_load_json(SCRIPT_PATH, default=[]) if os.path.exists(SCRIPT_PATH) else []
         voice_config = safe_load_json(VOICE_CONFIG_PATH, default={}) if os.path.exists(VOICE_CONFIG_PATH) else {}
-        return get_voice_rows(script_data, voice_config)
+        return get_voice_rows(script_data, voice_config, expand_states)
 
 
 @router.post("/api/voices/{speaker}/versions")

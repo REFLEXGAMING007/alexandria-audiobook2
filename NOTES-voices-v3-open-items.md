@@ -75,7 +75,48 @@ a partial checkpoint.
 So the duplication is cheap in pass 2 and genuinely expensive in pass 3.
 Varying the tags (`he told her`, `she answered`) avoids all three effects at once.
 
-## 4. Confirmed working
+## 5. DECIDED: state rows replace state chips
+
+Settled 2026-10-07 with the user. Chips are dropped; a settled state becomes a
+first-class roster row instead, so every existing control (Generate Personas,
+Context Lines, Advanced, Apply to) works on it with no new UI.
+
+- **Roster** — `GET /api/voices?expand_states=1`. Opt-in, so the legacy Voices tab
+  (same endpoint, default off) is untouched. A character with 2+ settled states
+  emits one row per state; single-state characters emit today's row unchanged.
+- **Row shape** — `row_key` (`MARO#adult`) unique for DOM/store/save;
+  `speaker` (`MARO`) for API calls; `age_group`; `from_entry`/`to_entry`.
+- **Title** — unchanged ("MARO"). The existing trait badge already shows
+  gender + age. Nothing that matches on the name breaks.
+- **Approval / reject / reviewed** — stays CHARACTER level. Not doing per-state.
+- **`voice_is_set` / pending counters** — stays CHARACTER level (option B).
+- **Unassigned state rows show NO base fallback** (option C). They render empty.
+  Reason: MARO's base entry is the placeholder `voice: "Aiden"` with an empty
+  description. Falling back to it would show a placeholder that looks like a real
+  voice and could be saved by accident.
+- **The generate_personas.py overwrite is NOT fixed now.** `:1128` writes the
+  persona to the character's main entry before copying it to the version, so
+  generating one state's persona clobbers the base entry. Deferred deliberately:
+  once all three states are generated, every row is correct and nothing is lost.
+  It only misleads if you generate for SOME states and leave others unassigned —
+  an unassigned row then shows a sibling state's voice. Not corrupting, just
+  confusing. Fixing it means editing a file the legacy tab also runs.
+
+### The constraint that shaped this
+
+`_apply_voice_save` merges shallowly per character:
+
+```python
+updated[voice_name] = {**metadata, **config.model_dump()}
+```
+
+`VoiceConfigItem.versions` is a plain dict, so a payload containing `versions`
+**replaces the whole dict** rather than merging per-version. A state-row save must
+therefore emit EVERY version for that character, or the others are silently
+destroyed. This is the same silent-data-loss shape as the two dropped request
+fields and the VoiceVersionRequest `config` bug.
+
+## 6. Confirmed working
 
 - Manual LLM transport, end to end (cast list + both script passes)
 - `transport: manual` needs no reachable LLM endpoint — `base_url` is ignored
