@@ -782,6 +782,46 @@
             #voicesv2-tab .vv2-library-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); }
         }
         /* ── Voices V2 (end) ─────────────────────────────────────────────── */
+
+        /* ── Voices V3 (begin) ─────────────────────────────────────────────
+           Voices V3 is a feature-for-feature replica of the original Voices
+           tab. It is a standalone workspace beside that tab, never inside it, and
+           every selector here is scoped to #voicesv3-tab: a bare selector would
+           reach the Voices tab and every other page, so there are none. */
+        #voicesv3-tab { font-size: 0.95rem; }
+        #voicesv3-tab .vv3-card { border-radius: 0.5rem; }
+        #voicesv3-tab .vv3-card .voice-card { border-width: 1px; }
+        #voicesv3-tab .vv3-toolbar { gap: 0.5rem 1rem; flex-wrap: wrap; }
+        #voicesv3-tab .vv3-toolbar .input-group { width: auto; }
+        #voicesv3-tab .vv3-narrator-strategy { min-width: 11rem; }
+        #voicesv3-tab .vv3-scope { min-width: 15rem; }
+        #voicesv3-tab .vv3-context { min-width: 8.5rem; }
+        #voicesv3-tab .vv3-batch { width: 5.5rem; }
+        #voicesv3-tab .vv3-status { font-size: 0.85rem; min-height: 1.25rem; }
+        #voicesv3-tab .vv3-save-status { font-size: 0.85rem; }
+        #voicesv3-tab .vv3-hint { font-size: 0.8rem; }
+        /* The roster is a single column until there is room for two, then the
+           identity column stays narrow so the type controls keep their width. */
+        #voicesv3-tab .voice-card .row > .col-md-3 { max-width: 22rem; }
+        #voicesv3-tab .voice-card .btn-group { flex-wrap: wrap; }
+        #voicesv3-tab .voice-card .form-text { font-size: 0.78rem; }
+        #voicesv3-tab .voice-states { border-left: 3px solid var(--bs-border-color, #dee2e6); padding-left: 0.6rem; }
+        #voicesv3-tab .voice-state-row + .voice-state-row { border-top: 1px dashed var(--bs-border-color, #dee2e6); padding-top: 0.4rem; }
+        #voicesv3-tab .ensemble-members { max-height: 16rem; overflow-y: auto; }
+        #voicesv3-tab .vv3-recovery textarea,
+        #voicesv3-tab .vv3-recovery input { font-size: 0.8rem; }
+        #voicesv3-tab table { font-size: 0.85rem; }
+        #voicesv3-tab .vv3-empty { padding: 2rem 1rem; }
+        @media (max-width: 575.98px) {
+            #voicesv3-tab .voice-card .row > .col-md-3 { max-width: none; }
+            #voicesv3-tab .vv3-toolbar .input-group { width: 100%; }
+            #voicesv3-tab .vv3-narrator-strategy,
+            #voicesv3-tab .vv3-scope { min-width: 0; }
+        }
+        @media (min-width: 992px) {
+            #voicesv3-tab .voice-card .row > .col-md-3 { flex: 0 0 20rem; }
+        }
+        /* ── Voices V3 (end) ─────────────────────────────────────────────── */
     </style>
     <script>
         /* Anti-flash: apply saved theme before first paint */
@@ -813,6 +853,7 @@
                     <li class="nav-item"><a href="#script" class="nav-link nav-pipeline" data-tab="script">2. Script</a></li>
                     <li class="nav-item"><a href="#voices" class="nav-link nav-pipeline" data-tab="voices">3. Voices</a></li>
                     <li class="nav-item"><a href="#voicesv2" class="nav-link nav-pipeline" data-tab="voicesv2">Voices V2</a></li>
+                    <li class="nav-item"><a href="#voicesv3" class="nav-link nav-pipeline" data-tab="voicesv3">Voices V3</a></li>
                     <li class="nav-item"><a href="#editor" class="nav-link nav-pipeline" data-tab="editor">4. Editor</a></li>
                     <li class="nav-item"><a href="#audio" class="nav-link nav-pipeline" data-tab="audio">5. Result</a></li>
                     <li class="nav-section-label nav-advanced-start" aria-hidden="true">Advanced</li>
@@ -1966,6 +2007,227 @@
                     <div class="vv2-library-list" data-voicesv2-region="library-list"></div>
                 </div>
             </section>
+        </div>
+
+        <!-- Voices V3: a feature-for-feature replica of the Voices tab above.
+     Every element inside is V3-owned and reached by data-voicesv3-region or
+     data-voicesv3-control. There are no ids here except the tab root itself. -->
+        <div id="voicesv3-tab" class="tab-content" style="display:none;">
+            <div class="card mb-3 vv3-card">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h4 class="m-0"><span class="step-indicator step-active">3</span>Voice Configuration (V3)</h4>
+                    <div class="d-flex align-items-center gap-3">
+                        <span data-voicesv3-control="ready-count" class="text-muted small" role="status" aria-live="polite" aria-atomic="true"></span>
+                        <div class="form-check form-check-inline m-0 small">
+                            <input class="form-check-input" type="checkbox" data-voicesv3-control="hide-ready" id="voicesv3-hide-ready">
+                            <label class="form-check-label" for="voicesv3-hide-ready">Hide ready</label>
+                        </div>
+                        <span data-voicesv3-control="save-status" class="vv3-save-status text-muted small" role="status" aria-live="polite" aria-atomic="true"></span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>Voices are detected from the generated script. Changes are saved automatically.</p>
+
+                    <!-- Toolbar: narrator, scope, persona knobs, suggestions -->
+                    <div class="d-flex align-items-center gap-3 mb-2 flex-wrap vv3-toolbar" data-voicesv3-region="toolbar">
+                        <div class="input-group input-group-sm vv3-narrator-strategy">
+                            <label class="input-group-text" for="voicesv3-narrator-strategy">Narrator selection</label>
+                            <select class="form-select" id="voicesv3-narrator-strategy" data-voicesv3-control="narrator-strategy"
+                                    aria-describedby="voicesv3-narrator-help"></select>
+                            <button class="btn btn-outline-secondary" type="button" data-voicesv3-control="narrator-preview"
+                                    aria-label="Preview the narrator selection">Preview</button>
+                        </div>
+                        <div class="input-group input-group-sm" data-voicesv3-control="narrator-focus-group" style="display:none;">
+                            <label class="input-group-text" for="voicesv3-narrator-focus">Preview focus</label>
+                            <select class="form-select" id="voicesv3-narrator-focus" data-voicesv3-control="narrator-focus"></select>
+                        </div>
+                        <div class="input-group input-group-sm" data-voicesv3-control="narrator-version-group" style="display:none;">
+                            <label class="input-group-text" for="voicesv3-narrator-version">Preview version</label>
+                            <select class="form-select" id="voicesv3-narrator-version" data-voicesv3-control="narrator-version"></select>
+                        </div>
+                        <span data-voicesv3-control="narrator-preview-status" class="vv3-status text-muted" role="status" aria-live="polite" aria-atomic="true"></span>
+
+                        <div class="input-group input-group-sm vv3-scope" title="Which characters Generate Personas and Suggest LoRA Voices work on">
+                            <label class="input-group-text" for="voicesv3-scope">Apply to</label>
+                            <select class="form-select" id="voicesv3-scope" data-voicesv3-control="scope" aria-describedby="voicesv3-scope-help">
+                                <option value="new">Only characters without a voice yet</option>
+                                <option value="all">All characters (regenerate)</option>
+                            </select>
+                        </div>
+                        <label class="form-check d-inline-flex align-items-center m-0 small" data-voicesv3-control="keep-wrap" style="display:none;">
+                            <input class="form-check-input me-1" type="checkbox" data-voicesv3-control="keep-in-library" id="voicesv3-keep-in-library" checked>
+                            <span>Save the current voices to the library first (<span data-voicesv3-control="keep-cast"></span>)</span>
+                        </label>
+
+                        <button class="btn btn-outline-primary" id="voicesv3-btn-gen-personas" data-voicesv3-control="persona-generate"
+                                aria-describedby="voicesv3-persona-help">
+                            <i class="fas fa-user-robot me-1"></i>Generate Personas
+                        </button>
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" data-voicesv3-control="persona-advanced" id="voicesv3-persona-advanced">
+                            <label class="form-check-label" for="voicesv3-persona-advanced">Advanced</label>
+                        </div>
+                        <div class="input-group input-group-sm vv3-batch" data-voicesv3-control="persona-batch" style="display:none;">
+                            <label class="input-group-text" for="voicesv3-persona-batch-size">Batch</label>
+                            <input class="form-control" id="voicesv3-persona-batch-size" type="number" min="1" max="200" value="40"
+                                   data-voicesv3-control="persona-batch-size">
+                        </div>
+                        <div class="input-group input-group-sm vv3-context" title="Sample spoken lines per character fed to the persona prompt">
+                            <label class="input-group-text" for="voicesv3-persona-context">Context</label>
+                            <select class="form-select" id="voicesv3-persona-context" data-voicesv3-control="persona-context"
+                                    aria-describedby="voicesv3-scope-help"></select>
+                            <input class="form-control" id="voicesv3-persona-context-custom" type="number" min="1" max="200" value="10"
+                                   data-voicesv3-control="persona-context-custom-input" aria-label="Custom persona context line count"
+                                   style="width: 5rem; display:none;">
+                        </div>
+                        <button class="btn btn-outline-danger" id="voicesv3-btn-cancel-personas" data-voicesv3-control="persona-cancel"
+                                style="display:none;" aria-label="Cancel persona generation">
+                            <i class="fas fa-stop me-1"></i>Cancel
+                        </button>
+                        <span data-voicesv3-control="persona-status" class="vv3-status text-muted" role="status" aria-live="polite" aria-atomic="true"></span>
+                    </div>
+
+                    <p class="form-text" id="voicesv3-scope-help">
+                        Apply to controls both Generate Personas and Suggest LoRA Voices. Context sets the number of sample
+                        spoken lines per character included in the persona prompt.
+                    </p>
+                    <p class="form-text" id="voicesv3-persona-help">
+                        Generate Personas asks the configured LLM to describe the characters selected by Apply to, then uses
+                        TTS to generate voice-reference audio. Review the generated personas and references before generating the book.
+                    </p>
+                    <p class="form-text" id="voicesv3-narrator-help">
+                        Global keeps the main narrator voice. Scene/Character focus uses the script’s focus character; Chapter
+                        uses its named narrator version. Gender and age modes use matching character traits or narrator
+                        versions. Missing matches keep the main narrator. Only the mode is saved: Preview focus and Preview
+                        version check a selection here and do not change the script or rendered audio.
+                    </p>
+
+                    <div class="small mb-2">
+                        <span data-voicesv3-control="persona-refresh-status" role="status" aria-live="polite"></span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" data-voicesv3-control="persona-refresh-retry" hidden>
+                            Retry Voices refresh
+                        </button>
+                    </div>
+
+                    <!-- Suggestions -->
+                    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap" data-voicesv3-region="suggestions">
+                        <button class="btn btn-outline-success" data-voicesv3-control="suggest"
+                                title="Use the configured LLM to match each character to the best-fitting downloaded LoRA voice">
+                            <i class="fas fa-wand-magic-sparkles me-1"></i>Suggest LoRA Voices
+                        </button>
+                        <button class="btn btn-success" data-voicesv3-control="suggest-apply-all" style="display:none;">
+                            <i class="fas fa-check-double me-1"></i>Apply all
+                        </button>
+                        <button class="btn btn-outline-secondary" data-voicesv3-control="suggest-dismiss" style="display:none;">
+                            <i class="fas fa-xmark me-1"></i>Dismiss
+                        </button>
+                        <span data-voicesv3-control="suggest-status" class="vv3-status text-muted" role="status" aria-live="polite" aria-atomic="true"></span>
+                        <span data-voicesv3-control="suggest-catalog-status" class="vv3-status text-warning" role="status" aria-live="polite"></span>
+                    </div>
+
+                    <p class="form-text" id="voicesv3-approval-help">
+                        Persona means the character description; Voice means the sound assigned to the character. Reviewed
+                        records that you checked it; Approved records that you accept it; Rejected records that it needs
+                        another choice. These are separate review states for the persona and the voice.
+                    </p>
+
+                    <!-- The roster: one card per character, rendered from the store -->
+                    <div data-voicesv3-region="roster"></div>
+                </div>
+            </div>
+
+            <!-- Manual persona recovery -->
+            <div class="card mb-3 vv3-card vv3-recovery" data-voicesv3-region="personas">
+                <details class="card-body" id="voicesv3-persona-recovery-panel">
+                    <summary class="fw-bold">Manual persona recovery</summary>
+                    <div class="mt-2">
+                        <div class="form-text mb-2">
+                            1. Enter the speaker and optionally the dialogue samples and narrator context below.
+                            2. Click Copy prompt and send that prompt to your chosen LLM.
+                            3. Paste its JSON reply into Persona JSON.
+                            4. Validate &amp; save stores this persona. Validate &amp; resume also requests continuation of the persona run.
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="visually-hidden" for="voicesv3-recovery-speaker">Speaker name</label>
+                                <input class="form-control form-control-sm" id="voicesv3-recovery-speaker"
+                                       data-voicesv3-control="recovery-speaker" placeholder="Speaker name">
+                            </div>
+                            <div class="col-md-7">
+                                <label class="visually-hidden" for="voicesv3-recovery-json">Persona JSON</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="voicesv3-recovery-json" rows="3"
+                                          data-voicesv3-control="recovery-json"
+                                          placeholder='{"description":"...","ref_text":"..."}'></textarea>
+                            </div>
+                            <div class="col-md-2 d-grid gap-1">
+                                <button class="btn btn-sm btn-outline-secondary" data-voicesv3-control="recovery-copy">Copy prompt</button>
+                                <button class="btn btn-sm btn-outline-success" data-voicesv3-control="recovery-save">Validate &amp; save</button>
+                                <button class="btn btn-sm btn-outline-primary" data-voicesv3-control="recovery-resume">Validate &amp; resume</button>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-md-6">
+                                <label class="visually-hidden" for="voicesv3-recovery-samples">Dialogue samples</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="voicesv3-recovery-samples" rows="2"
+                                          data-voicesv3-control="recovery-samples" placeholder="Dialogue samples (used by Copy prompt)"></textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="visually-hidden" for="voicesv3-recovery-narration">Narrator context</label>
+                                <textarea class="form-control form-control-sm font-monospace" id="voicesv3-recovery-narration" rows="2"
+                                          data-voicesv3-control="recovery-narration" placeholder="Narrator context (used by Copy prompt)"></textarea>
+                            </div>
+                        </div>
+                        <div data-voicesv3-control="recovery-context" id="voicesv3-recovery-context" class="alert alert-warning small mt-2 mb-0" style="display:none;"></div>
+                        <div data-voicesv3-control="recovery-status" class="form-text"></div>
+                    </div>
+                </details>
+            </div>
+
+            <!-- Series Cast: reuse character voices across books -->
+            <div class="card mb-3 vv3-card" id="voicesv3-series-cast-card" data-voicesv3-region="cast">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="m-0"><i class="fas fa-users me-2"></i>Series Cast</h5>
+                    <span data-voicesv3-control="status" class="vv3-status text-muted" role="status" aria-live="polite" aria-atomic="true"></span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Save character voices to a named cast and reuse them across books in a series, so recurring
+                        characters sound the same. The <strong>narrator is shared across the whole series</strong>
+                        unless a cast saves its own.
+                    </p>
+                    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                        <label class="small text-muted m-0" for="voicesv3-cast-select">Cast:</label>
+                        <select id="voicesv3-cast-select" class="form-select form-select-sm" style="width:auto;min-width:160px;"
+                                data-voicesv3-control="select"></select>
+                        <button class="btn btn-sm btn-outline-primary" data-voicesv3-control="create" aria-label="Create a new cast">
+                            <i class="fas fa-plus me-1"></i>New
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" data-voicesv3-control="delete" title="Delete selected cast" aria-label="Delete selected cast">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <span class="vr mx-1"></span>
+                        <button class="btn btn-sm btn-outline-success" data-voicesv3-control="save" aria-label="Save the current voices to this cast">
+                            <i class="fas fa-floppy-disk me-1"></i>Save to cast
+                        </button>
+                        <button class="btn btn-sm btn-success" data-voicesv3-control="apply" aria-label="Apply this cast to the current book">
+                            <i class="fas fa-wand-magic-sparkles me-1"></i>Apply cast
+                        </button>
+                        <button class="btn btn-sm btn-outline-success" data-voicesv3-control="apply-bulk" aria-label="Apply this cast to multiple books">
+                            <i class="fas fa-layer-group me-1"></i>Apply to multiple books
+                        </button>
+                    </div>
+                    <div data-voicesv3-control="members"></div>
+                    <div data-voicesv3-control="apply-panel" class="mt-2"></div>
+                    <div data-voicesv3-control="bulk"></div>
+                </div>
+            </div>
+
+            <div class="card vv3-card">
+                <div class="card-header">Voice Parsing Logs</div>
+                <div class="card-body p-0">
+                    <div id="voicesv3-logs" class="log-window" style="height: 150px;"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Designer Tab -->
@@ -3135,6 +3397,31 @@
     <script src="/static/js/voices-v2/library/index.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/lifecycle.js?v=__APP_BUILD__"></script>
     <script src="/static/js/voices-v2/index.js?v=__APP_BUILD__"></script>
+        <!-- Voices V3: ordered classic scripts, same rules as the app-* files.
+             Load order is the dependency contract, declared in voices-v3/index.js:
+             core -> state -> selectors -> api -> save -> widgets -> panels
+             -> events -> actions -> lifecycle -> index (bootstrap last).
+             All of them sit before app-reports.js because restoreTab() runs at the
+             end of that file and may select this tab on load, which requires
+             window.VoicesV3 to already exist. -->
+        <script src="/static/js/voices-v3/core.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/state.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/selectors.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/api.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/save.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/widgets/labels.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/widgets/markup.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/panels/toolbar.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/panels/personas.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/panels/card.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/panels/states.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/panels/suggestions.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/panels/cast.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/panels/roster.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/events.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/actions.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/lifecycle.js?v=__APP_BUILD__"></script>
+        <script src="/static/js/voices-v3/index.js?v=__APP_BUILD__"></script>
     <script src="/static/js/app-reports.js?v=__APP_BUILD__"></script>
 </body>
 </html>

@@ -544,6 +544,12 @@
                 // lifecycle, so the only thing navigation owes it is the mount
                 // call; mount() is idempotent and re-reads on later visits.
                 VoicesV2.mount();
+            } else if (selectedLink.dataset.tab === 'voicesv3') {
+                // Voices V3 is a standalone workspace and a feature-for-feature
+                // replica of the Voices tab. It owns its own state, its own save
+                // pipeline and its own lifecycle, so navigation owes it only the
+                // mount call; mount() is idempotent and re-reads on later visits.
+                VoicesV3.mount();
             } else if (selectedLink.dataset.tab === 'designer') {
                 loadDesignedVoices();
             } else if (selectedLink.dataset.tab === 'training') {
