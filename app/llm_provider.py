@@ -15,6 +15,7 @@ import time
 from types import SimpleNamespace
 
 import httpx
+import psutil
 from openai import OpenAI
 
 
@@ -450,7 +451,17 @@ def manual_llm_dir(data_dir):
 
 
 def is_manual_request_owner_alive(pending):
-    """Whether a queued manual request still has a process to receive it."""
+    """Whether a queued manual request still has a process to receive it.
+
+    Liveness uses psutil rather than `os.kill(pid, 0)`. The POSIX idiom is not
+    portable here: on Windows `os.kill(pid, 0)` returns NORMALLY for a dead pid
+    (so an abandoned queue slot would never be reclaimed), and for some pids it
+    raises a bare OSError [WinError 87] that is neither ProcessLookupError nor
+    PermissionError. That escaped the old handler as a SystemError and killed the
+    manual loop mid-request instead of waiting for the user - observed live, where
+    persona generation died with "Error calling LLM API [api_error]: OSError"
+    three times in under a second and fell back to a generic persona.
+    """
     pid = pending.get("owner_pid") if isinstance(pending, dict) else None
     if not isinstance(pid, int) or pid < 1:
         return False  # a legacy request cannot be tied to a live owner
@@ -459,12 +470,15 @@ def is_manual_request_owner_alive(pending):
         return any(thread.ident == owner_thread and thread.is_alive()
                    for thread in threading.enumerate())
     try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
+        return psutil.pid_exists(pid)
+    except Exception:  # noqa: BLE001 - liveness is best-effort, never fatal
+        # Fall back to the POSIX idiom only if psutil cannot answer, and treat any
+        # platform error as "assume alive" so a live owner is never evicted.
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return True
 
 
 class ManualClient:
