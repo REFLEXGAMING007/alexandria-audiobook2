@@ -90,16 +90,38 @@
             current.age_group || '') || '';
         if (!age) { return false; }
         try {
-            // A version is a whole configuration snapshot, so it is built from the
-            // working entry the user is looking at rather than from the defaults.
-            var payload = Object.assign({}, current, { age_group: age, source: 'voices_v3' });
-            delete payload.members;
-            if (payload.type === 'ensemble') {
+            if (current.type === 'ensemble') {
                 core.notify('An ensemble cannot be saved as a version.', 'warning');
                 return false;
             }
-            var response = await namespace.api.addVersion(name, payload);
-            var versionId = (response && response.version_id) || (age + '-' + Date.now());
+            // A version is a whole configuration snapshot, so it is built from the
+            // working entry the user is looking at rather than from the defaults.
+            // The fields go inside `config`: `VoiceVersionRequest` only reads
+            // `version_id`, `age_group` and `config`, so anything sent as a sibling
+            // is discarded and the backend snapshots the character entry instead.
+            // Bookkeeping keys are stripped for the same reason tts.get_version_fields
+            // strips them when overlaying.
+            var snapshot = Object.assign({}, current, { source: 'voices_v3' });
+            delete snapshot.members;
+            delete snapshot.ready;
+            delete snapshot.alias_of;
+            delete snapshot.persona_status;
+            delete snapshot.voice_status;
+            delete snapshot.persona;
+            delete snapshot.active_version;
+            delete snapshot.active_candidate;
+            delete snapshot.versions;
+            delete snapshot.version_timeline;
+            delete snapshot.style_timeline;
+            delete snapshot.candidates;
+            delete snapshot.age_group;
+
+            var versionId = (age + '-' + Date.now()).slice(0, 80);
+            await namespace.api.addVersion(name, {
+                version_id: versionId,
+                age_group: age,
+                config: snapshot
+            });
             await namespace.api.selectVersion(name, versionId);
             core.notify('Saved version ' + versionId + ' for ' + name + '.', 'success');
             await namespace.lifecycle.reloadVoices();
@@ -191,7 +213,10 @@
     /* clone references                                                    */
     /* ------------------------------------------------------------------ */
 
-    async function uploadCloneVoice(name, file) {
+    /* `scoped` means the reference belongs to an open state draft rather than to
+     * the character. The upload itself is the same either way; only the write
+     * target differs, and a state draft is never autosaved. */
+    async function uploadCloneVoice(name, file, scoped) {
         if (!file || !name) { return false; }
         try {
             var response = await namespace.api.uploadCloneVoice(file);
@@ -199,14 +224,21 @@
             var uploadedId = response && response.id;
             if (uploadedId) {
                 var storeState = state.getState();
-                var current = Object.assign({}, selectors.workingOf(storeState, name));
+                var current = scoped
+                    ? Object.assign({}, selectors.selectStateDraft(storeState, name).entry)
+                    : Object.assign({}, selectors.workingOf(storeState, name));
                 var row = selectors.selectCloneVoices(storeState).find(function (voice) { return voice.id === uploadedId; });
                 if (row) {
                     current.type = 'clone';
                     current.ref_audio = 'clone_voices/' + row.filename;
                     current.ref_text = row.ref_text || current.ref_text || '';
-                    state.dispatch({ type: 'working/set', name: name, entry: current });
-                    namespace.saveController.scheduleSave();
+                    if (scoped) {
+                        var draft = selectors.selectStateDraft(storeState, name);
+                        state.dispatch({ type: 'state-draft/set', name: name, index: draft.index, entry: current });
+                    } else {
+                        state.dispatch({ type: 'working/set', name: name, entry: current });
+                        namespace.saveController.scheduleSave();
+                    }
                 }
             }
             core.notify('Reference audio uploaded.', 'success');
@@ -219,11 +251,14 @@
         }
     }
 
-    async function playCloneVoice(name) {
-        var current = selectors.workingOf(state.getState(), name);
-        var path = current.ref_audio || selectors.storedConfig(state.getState(), name).ref_audio || '';
+    async function playCloneVoice(name, scoped) {
+        var storeState = state.getState();
+        var draft = scoped ? selectors.selectStateDraft(storeState, name) : null;
+        var current = draft ? (draft.entry || {}) : selectors.workingOf(storeState, name);
+        var path = current.ref_audio || (scoped ? '' : selectors.storedConfig(storeState, name).ref_audio) || '';
         if (!path) {
-            core.notify('There is no reference audio for ' + name + '.', 'warning');
+            core.notify('There is no reference audio for '
+                + (draft ? 'this state of ' : '') + name + '.', 'warning');
             return false;
         }
         var namespace_ = path.indexOf('clone_voices/') === 0 ? 'clone_voices'
@@ -259,15 +294,19 @@
         }
     }
 
-    /* Voice Design is a separate tab that owns the designer workspace; the card
-     * only needs to hand the character over to it. */
-    function openVoiceDesigner(name) {
+    /* The Designer tab owns the workspace, and the only supported way in is the
+     * original tab's `openVoiceDesignEditor(button)`: it reads the description,
+     * reference transcript and alias straight off the card's own controls. So the
+     * button node is passed, not the character name - which also means it picks up
+     * the STATE draft's values when a state chip is open, because the card renders
+     * the draft's fields in the same place. */
+    function openVoiceDesigner(name, button) {
+        if (typeof window.openVoiceDesignEditor === 'function' && button) {
+            window.openVoiceDesignEditor(button);
+            return true;
+        }
         if (typeof window.activateTab === 'function') {
             window.activateTab('designer');
-            if (typeof window.selectDesignerVoice === 'function') {
-                window.selectDesignerVoice(name);
-            }
-            return true;
         }
         core.notify('Open the Voice Designer tab to redesign this voice.', 'info');
         return false;

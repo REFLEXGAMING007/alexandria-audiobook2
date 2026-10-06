@@ -19,6 +19,8 @@
 
     function attr(value) { return escape(value); }
 
+    function text(value) { return typeof value === 'string' ? value : ''; }
+
     /* ---- identity column ---- */
 
     function aliasBadge(name, aliasOf) {
@@ -111,6 +113,82 @@
             + '<div data-voicesv3-suggestions="' + attr(name) + '"></div>';
     }
 
+    /* ---- state chips ---- */
+
+    /* One button per settled state, under the character name. Selecting one puts
+     * the card into state-edit mode, where the type controls below apply to that
+     * state instead of to the whole character. The count of scheduled states is
+     * shown on each chip so it is obvious which ones are already handled. */
+    function stateChips(state, name, activeIndex) {
+        var chips = selectors.selectStateChips(state, name);
+        if (!chips.length) { return ''; }
+
+        var buttons = chips.map(function (chip) {
+            var isActive = chip.index === activeIndex;
+            var marks = [];
+            if (chip.assigned) { marks.push('voice set'); }
+            if (chip.scheduled) { marks.push('scheduled'); }
+            var suffix = marks.length ? ' \u2014 ' + marks.join(', ') : '';
+            var cls = 'vv3-chip' + (isActive ? ' is-active' : '')
+                + (chip.scheduled ? ' is-scheduled' : '')
+                + (chip.assigned ? '' : ' is-unassigned');
+            return '<button type="button" class="' + cls + '"'
+                + ' data-voicesv3-action="state-chip"'
+                + ' data-voicesv3-name="' + attr(name) + '"'
+                + ' data-voicesv3-index="' + chip.index + '"'
+                + ' aria-pressed="' + (isActive ? 'true' : 'false') + '"'
+                + ' aria-label="Edit the voice for ' + attr(name) + ', '
+                + 'state ' + (chip.index + 1) + ' of ' + chips.length + ': ' + attr(chip.label) + suffix + '"'
+                + '>' + escape(chip.label) + '</button>';
+        }).join('');
+
+        return '<div class="vv3-chips" role="group" aria-label="Settled states for ' + attr(name) + '">'
+            + '<span class="vv3-chips-label">Voices per state</span>'
+            + buttons
+            + '<span class="vv3-chips-hint">'
+            + (activeIndex === null
+                ? 'Pick a state to give it its own voice.'
+                : 'Editing one state below. The character keeps its own voice for the other states.')
+            + '</span>'
+            + '</div>';
+    }
+
+    /* The banner shown while a state chip is open. */
+    function stateEditBanner(state, name, target) {
+        if (target.index === null) { return ''; }
+        var chip = target.chip;
+        var draft = selectors.selectStateDraft(state, name);
+        var dirty = !!(draft && draft.dirty);
+        var fromIndex = selectors.selectStateFromIndex(state, name, target.index);
+
+        var warnings = '';
+        if (fromIndex === null) {
+            warnings = '<div class="vv3-chip-warn">This state could not be mapped to a chunk, so it cannot be '
+                + 'scheduled yet. Render the book once in the Editor so chunks exist, then reopen this state.</div>';
+        }
+
+        return '<div class="vv3-state-editor">'
+            + '<div class="vv3-state-editor-head">'
+            + '<strong>Editing voice for state ' + (target.index + 1) + ': ' + escape(chip ? chip.label : '') + '</strong>'
+            + '<span class="vv3-state-editor-key">saved as version <code>' + escape(chip ? chip.versionId : '') + '</code>'
+            + (fromIndex === null ? '' : ' &middot; from chunk ' + (fromIndex + 1)) + '</span>'
+            + '</div>'
+            + warnings
+            + '<div class="vv3-state-editor-actions">'
+            + '<button type="button" class="btn btn-sm btn-success" data-voicesv3-action="state-apply"'
+            + ' data-voicesv3-name="' + attr(name) + '" data-voicesv3-index="' + target.index + '"'
+            + (fromIndex === null ? ' disabled' : '') + '>Save this state\u2019s voice</button>'
+            + '<button type="button" class="btn btn-sm btn-outline-secondary" data-voicesv3-action="state-close"'
+            + ' data-voicesv3-name="' + attr(name) + '">Done</button>'
+            + (dirty ? '<span class="vv3-state-editor-dirty">unsaved</span>' : '')
+            + '</div>'
+            + '</div>';
+    }
+
+    function scopeAttr(target) {
+        return target.scope === 'state' ? ' data-voicesv3-target="state"' : '';
+    }
+
     function readySwitch(name, index, ready) {
         return '<div class="form-check form-switch small">'
             + '<input class="form-check-input voice-ready" type="checkbox" id="voicesv3-ready-' + index + '"'
@@ -134,13 +212,13 @@
 
     /* ---- type radios ---- */
 
-    function typeRadios(name, index, selected) {
+    function typeRadios(name, index, selected, scope) {
         return labels.VOICE_TYPES.map(function (type) {
             var isChecked = type === selected;
             return '<div class="form-check form-check-inline">'
                 + '<input class="form-check-input voice-type" type="radio" name="voicesv3-type-' + index + '"'
                 + ' value="' + attr(type) + '" id="voicesv3-type-' + index + '-' + attr(type) + '"'
-                + ' data-voicesv3-action="type-set" data-voicesv3-name="' + attr(name) + '"'
+                + ' data-voicesv3-action="type-set" data-voicesv3-name="' + attr(name) + '"' + (scope || '')
                 + ' aria-label="' + attr((labels.VOICE_TYPE_ARIA[type] || type) + ' for ' + name) + '"'
                 + (isChecked ? ' checked' : '') + '>'
                 + '<label class="form-check-label" for="voicesv3-type-' + index + '-' + attr(type) + '">'
@@ -153,40 +231,40 @@
 
     /* ---- the six option blocks ---- */
 
-    function customBlock(state, name, type, working, reference) {
+    function customBlock(state, name, type, working, reference, scope, editingState) {
         var options = selectors.selectCustomVoiceOptions(state, name);
         return '<div class="custom-opts" style="display: ' + shown('custom', type) + '">'
             + '<div class="row g-2">'
             + '<div class="col-md-6">'
-            + '<select class="form-select voice-select" data-voicesv3-field="voice" data-voicesv3-name="' + attr(name) + '"'
+            + '<select class="form-select voice-select" data-voicesv3-field="voice" data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Custom voice for ' + name) + '">'
             + markup.customVoiceOptions(options, working.voice) + '</select>'
             + '</div>'
             + '<div class="col-md-6">'
             + '<input type="text" class="form-control character-style" data-voicesv3-field="character_style"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Custom voice style for ' + name) + '"'
             + ' placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)"'
             + ' value="' + attr(working.character_style || '') + '">'
-            + markup.styleTimeline(selectors.selectStylePoints(state, name), name)
+            + markup.styleTimeline(editingState ? [] : selectors.selectStylePoints(state, name), name)
             + '</div>'
             + '</div>'
             + '</div>';
     }
 
-    function builtinLoraBlock(state, name, type, working) {
+    function builtinLoraBlock(state, name, type, working, scope) {
         var style = type === 'builtin_lora' ? (working.character_style || '') : '';
         return '<div class="builtin-lora-opts" style="display: ' + shown('builtin_lora', type) + '">'
             + '<div class="row g-2">'
             + '<div class="col-md-6">'
             + '<select class="form-select builtin-lora-select" data-voicesv3-field="adapter_id"'
-            + ' data-voicesv3-type="builtin_lora" data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-type="builtin_lora" data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Built-in LoRA voice for ' + name) + '">'
             + markup.builtinLoraGroups(state, working.adapter_id) + '</select>'
             + '</div>'
             + '<div class="col-md-6">'
             + '<input type="text" class="form-control builtin-lora-style" data-voicesv3-field="character_style"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Built-in LoRA voice style for ' + name) + '"'
             + ' placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)"'
             + ' value="' + attr(style) + '">'
@@ -196,39 +274,39 @@
             + '</div>';
     }
 
-    function cloneBlock(state, name, type, working, reference) {
+    function cloneBlock(state, name, type, working, reference, scope) {
         var refAudio = working.ref_audio || '';
         return '<div class="clone-opts" style="display: ' + shown('clone', type) + '">'
             + '<div class="row g-2 mb-2 align-items-center">'
             + '<div class="col">'
             + '<select class="form-select designed-voice-select" data-voicesv3-action="reference-select"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Reference voice for ' + name) + '">'
             + markup.referenceVoiceOptions(state, reference, refAudio) + '</select>'
             + '</div>'
             + '<div class="col-auto">'
             + '<button class="btn btn-sm btn-outline-primary" type="button" data-voicesv3-action="clone-upload"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Upload reference audio for ' + name) + '" title="Upload audio file">'
             + '<i class="fas fa-upload"></i> Upload</button>'
             + '<input type="file" class="clone-voice-file-input" data-voicesv3-action="clone-file"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Upload reference audio for ' + name) + '"'
             + ' accept=".wav,.mp3,.flac,.ogg" style="display:none">'
             + '</div>'
             + '</div>'
             + '<input type="text" class="form-control ref-text mb-2" data-voicesv3-field="ref_text"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Reference transcript for ' + name) + '"'
             + ' placeholder="Reference Text" value="' + attr(working.ref_text || '') + '">'
             + '<div class="input-group">'
             + '<input type="text" class="form-control ref-audio" data-voicesv3-field="ref_audio"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Reference audio path for ' + name) + '"'
             + ' placeholder="Path to audio file" value="' + attr(refAudio) + '"'
             + (reference ? ' readonly' : '') + '>'
             + '<button class="btn btn-sm btn-outline-secondary clone-play-btn" type="button"'
-            + ' data-voicesv3-action="clone-play" data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-action="clone-play" data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Play reference audio for ' + name) + '" title="Play reference audio"'
             + ' style="display:' + (refAudio ? 'inline-block' : 'none') + '"><i class="fas fa-play"></i></button>'
             + '<button class="btn btn-sm btn-outline-danger clone-delete-btn" type="button"'
@@ -240,19 +318,19 @@
             + '</div>';
     }
 
-    function loraBlock(state, name, type, working) {
+    function loraBlock(state, name, type, working, scope) {
         var style = type === 'lora' ? (working.character_style || '') : '';
         return '<div class="lora-opts" style="display: ' + shown('lora', type) + '">'
             + '<div class="row g-2">'
             + '<div class="col-md-6">'
             + '<select class="form-select lora-adapter-select" data-voicesv3-field="adapter_id"'
-            + ' data-voicesv3-type="lora" data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-type="lora" data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Trained LoRA voice for ' + name) + '">'
             + markup.userLoraOptions(state, working.adapter_id) + '</select>'
             + '</div>'
             + '<div class="col-md-6">'
             + '<input type="text" class="form-control lora-character-style" data-voicesv3-field="character_style"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('LoRA voice style for ' + name) + '"'
             + ' placeholder="Character style (e.g. refined aristocratic tone, heavy Scottish accent)"'
             + ' value="' + attr(style) + '">'
@@ -261,10 +339,10 @@
             + '</div>';
     }
 
-    function designBlock(state, name, type, working) {
+    function designBlock(state, name, type, working, scope) {
         return '<div class="design-opts" style="display: ' + shown('design', type) + '">'
             + '<input type="text" class="form-control design-description mb-1" data-voicesv3-field="description"'
-            + ' data-voicesv3-name="' + attr(name) + '"'
+            + ' data-voicesv3-name="' + attr(name) + '"' + (scope || '')
             + ' aria-label="' + attr('Base voice description for ' + name) + '"'
             + ' placeholder="Base voice description (e.g. Young strong soldier)"'
             + ' value="' + attr(working.description || '') + '">'
@@ -278,12 +356,14 @@
             + '</div>';
     }
 
-    function ensembleBlock(state, name, type, working) {
+    function ensembleBlock(state, name, type, working, scope) {
         var suggestions = selectors.selectEnsembleSuggestions(state, name);
-        var members = selectors.workingOf(state, name).members || [];
+        /* Read from the edit target, not `workingOf`, so a state ensemble can
+         * differ from the character's own ensemble. */
+        var members = working.members || [];
         return '<div class="ensemble-opts" style="display: ' + shown('ensemble', type) + '">'
             + '<div class="ensemble-members small">'
-            + markup.ensembleMembers(selectors.arrayOf(state.roster.names), members, suggestions)
+            + markup.ensembleMembers(selectors.arrayOf(state.roster.names), members, suggestions, scope)
             + '</div>'
             + '<span class="text-muted small">' + escape(labels.ENSEMBLE_HELP) + '</span>'
             + '</div>';
@@ -294,22 +374,37 @@
     function card(state, row, index) {
         var name = row.name;
         var stored = row.config || {};
-        var working = selectors.workingOf(state, name);
-        var type = selectors.selectType(state, name);
-        var reference = selectors.selectLibraryReference(state, working.ref_audio || stored.ref_audio || '');
-        var ready = !!working.ready;
 
-        return '<div class="card voice-card mb-3' + (ready ? ' border-success' : '') + '"'
+        /* When a state chip is open the card edits that STATE, not the character.
+         * `target.entry` is the state draft (pre-filled from the saved version),
+         * so the same type controls serve both scopes. */
+        var target = selectors.selectEditTarget(state, name);
+        var working = target.entry;
+        var editingState = target.index !== null;
+        var type = text(working.type) || text(stored.type) || 'custom';
+        var reference = selectors.selectLibraryReference(state, working.ref_audio || stored.ref_audio || '');
+        var ready = !!selectors.workingOf(state, name).ready;
+        var scope = scopeAttr(target);
+
+        return '<div class="card voice-card mb-3' + (ready ? ' border-success' : '')
+            + (editingState ? ' is-state-editing' : '') + '"'
             + ' data-voice="' + attr(name) + '" data-ready="' + (ready ? '1' : '0') + '">'
             + '<div class="card-body"><div class="row">'
 
             + '<div class="col-md-3">'
             + '<h5 class="card-title">' + escape(name)
-            + aliasBadge(name, working.alias_of)
+            + aliasBadge(name, selectors.workingOf(state, name).alias_of)
             + lineCountBadge(row.lineCount)
             + markup.traitBadge(row.traits)
             + '</h5>'
-            + '<button class="btn btn-sm btn-outline-primary mt-1" type="button" data-voicesv3-action="persona-regenerate"'
+            + stateChips(state, name, target.index)
+            + stateEditBanner(state, name, target)
+
+            /* Persona, approval and the active-version picker are all character
+             * level: a state version is neither a persona nor the character's
+             * active voice, so they are hidden while a state is open rather than
+             * left on screen implying they apply to the state. */
+            + (editingState ? '' : '<button class="btn btn-sm btn-outline-primary mt-1" type="button" data-voicesv3-action="persona-regenerate"'
             + ' data-voicesv3-name="' + attr(name) + '"'
             + ' aria-label="' + attr('Regenerate persona for ' + name) + '">'
             + '<i class="fas fa-rotate me-1"></i>Regenerate persona</button>'
@@ -320,21 +415,25 @@
             + reviewStatusLine(stored)
             + personaAuditLine(name, stored)
             + approvalButtons(name)
-            + versionSelect(state, name)
+            + versionSelect(state, name))
+
+            /* The manual Voice changes panel stays available in both scopes. It is
+             * the documented fallback for this flow, so it is never hidden - only
+             * the chips are the new path. */
             + voiceChangesButton(name, row.traits)
             + candidatesBlock(state, name)
-            + readySwitch(name, index, ready)
-            + aliasSelect(state, name, working.alias_of)
+            + (editingState ? '' : readySwitch(name, index, ready)
+                + aliasSelect(state, name, selectors.workingOf(state, name).alias_of))
             + '</div>'
 
             + '<div class="col-md-9">'
-            + '<div class="mb-2">' + typeRadios(name, index, type) + '</div>'
-            + customBlock(state, name, type, working, reference)
-            + builtinLoraBlock(state, name, type, working)
-            + cloneBlock(state, name, type, working, reference)
-            + loraBlock(state, name, type, working)
-            + designBlock(state, name, type, working)
-            + ensembleBlock(state, name, type, working)
+            + '<div class="mb-2">' + typeRadios(name, index, type, scope) + '</div>'
+            + customBlock(state, name, type, working, reference, scope, editingState)
+            + builtinLoraBlock(state, name, type, working, scope)
+            + cloneBlock(state, name, type, working, reference, scope)
+            + loraBlock(state, name, type, working, scope)
+            + designBlock(state, name, type, working, scope)
+            + ensembleBlock(state, name, type, working, scope)
             + '</div>'
 
             + '</div></div></div>';

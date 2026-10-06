@@ -261,6 +261,190 @@
         return arrayOf(state.suggestions && state.suggestions.byName && state.suggestions.byName[name]);
     }
 
+    /* ------------------------------------------------------------------ */
+    /* state chips                                                         */
+    /* ------------------------------------------------------------------ */
+
+    function prettyAge(ageGroup) {
+        return String(ageGroup || '').replace(/_/g, ' ');
+    }
+
+    function titleise(value) {
+        if (!value) { return ''; }
+        return String(value).charAt(0).toUpperCase() + String(value).slice(1);
+    }
+
+    /* A readable label for one settled state, e.g. "Male • Young adult". */
+    function stateLabel(entry) {
+        var gender = titleise(text(entry.gender));
+        var band = titleise(prettyAge(text(entry.age_group)));
+        var parts = [];
+        if (gender && gender.toLowerCase() !== 'unknown') { parts.push(gender); }
+        if (band && band.toLowerCase() !== 'unknown') { parts.push(band); }
+        return parts.join(' \u2022 ');
+    }
+
+    /* Version keys for every settled state, in order.
+     *
+     * Uniqueness is the load-bearing property here: two states sharing a key
+     * would mean saving one state silently overwrites the other, and the
+     * timeline would point both at whichever was written last. So the base key
+     * is the age band when that is unique (matching the key
+     * `generate_age_version` already writes, so an existing age version stays
+     * selectable rather than being orphaned), the band plus gender when two
+     * states share a band, and finally the state ordinal if even that collides -
+     * which is what happens for two adult states of the same gender.
+     */
+    function versionKeysForStates(states) {
+        var list = arrayOf(states);
+        var taken = Object.create(null);
+        return list.map(function (entry, index) {
+            var band = text(entry.age_group);
+            var gender = text(entry.gender);
+            var sameBand = list.filter(function (candidate) {
+                return text(candidate.age_group) === band;
+            }).length;
+
+            var candidates = [];
+            if (band) { candidates.push(sameBand <= 1 ? band : band + '_' + (gender || index)); }
+            if (gender) { candidates.push(gender + '_' + (band || index)); }
+            candidates.push('state_' + index);
+
+            var key = candidates.find(function (candidate) {
+                return !taken[candidate];
+            }) || ('state_' + index);
+            taken[key] = true;
+            return key;
+        });
+    }
+
+    function versionKeyForState(states, index) {
+        return versionKeysForStates(states)[index] || '';
+    }
+
+    /* One chip per settled state. Reads only `traits.states`, which the roster
+     * projection already carries, so the chips render on first paint with no
+     * extra request. */
+    function selectStateChips(state, name) {
+        var row = selectRow(state, name);
+        var states = row && row.traits ? arrayOf(row.traits.states) : [];
+        if (states.length < 2) { return []; }
+
+        var storedVersions = storedConfig(state, name).versions || {};
+        var applied = selectStatePanel(state, name).applied || [];
+        var keys = versionKeysForStates(states);
+
+        return states.map(function (entry, index) {
+            var key = keys[index];
+            /* The applied timeline is keyed by CHUNK index, so a state can only
+             * be reported as scheduled once its row has been fetched and we know
+             * which chunk it starts on. Before that, `point` stays null rather
+             * than guessing from the state ordinal. */
+            var fromIndex = selectStateFromIndex(state, name, index);
+            var point = fromIndex === null ? null
+                : (applied.find(function (candidate) {
+                    return candidate.from_index === fromIndex;
+                }) || null);
+            return {
+                index: index,
+                gender: text(entry.gender) || 'unknown',
+                ageGroup: text(entry.age_group) || 'unknown',
+                label: stateLabel(entry),
+                versionId: key,
+                assigned: !!storedVersions[key],
+                scheduled: !!point,
+                point: point
+            };
+        });
+    }
+
+    /* The timeline row for one state, which is where `from_index` lives. The
+     * timeline is fetched lazily when a chip is first opened. */
+    function selectStateRow(state, name, index) {
+        return arrayOf(selectStatePanel(state, name).rows)[index] || null;
+    }
+
+    function selectStateFromIndex(state, name, index) {
+        var row = selectStateRow(state, name, index);
+        if (!row) { return null; }
+        return (row.from_index === null || row.from_index === undefined) ? null : row.from_index;
+    }
+
+    /* Which state, if any, is being edited on this card right now. */
+    function selectEditingStateIndex(state, name) {
+        var editing = state.editingState;
+        if (!editing || editing.name !== name) { return null; }
+        return editing.index;
+    }
+
+    /* The stored voice version for a state, if the character already has one. */
+    function selectStateVersionEntry(state, name, index) {
+        var chips = selectStateChips(state, name);
+        var chip = chips[index];
+        if (!chip) { return null; }
+        var versions = storedConfig(state, name).versions || {};
+        return versions[chip.versionId] || null;
+    }
+
+    /* The unsaved draft for the open chip, pre-filled from the stored version. */
+    function selectStateDraft(state, name) {
+        return (state.stateDraft && state.stateDraft[name]) || null;
+    }
+
+    /* The draft shape a state's voice version is written from.
+     *
+     * `versions` are overlays: tts.get_version_fields strips age_group, the
+     * version/timeline structures, candidates and the active pointers before
+     * laying one over the entry. So only voice-defining fields belong here, and
+     * the caller's per-state traits ride alongside as the version's own
+     * age_group/gender labels rather than as overlay content.
+     */
+    var VERSION_OVERLAY_FIELDS = ['type', 'voice', 'character_style', 'ref_audio', 'ref_text',
+        'adapter_id', 'adapter_path', 'description', 'members'];
+
+    function stateVersionEntry(state, name, index) {
+        var draft = selectStateDraft(state, name);
+        var stored = selectStateVersionEntry(state, name, index) || {};
+        var source = (draft && draft.entry) ? draft.entry : stored;
+        var config = {};
+        VERSION_OVERLAY_FIELDS.forEach(function (key) {
+            var value = source[key];
+            if (value === undefined || value === null || value === '') { return; }
+            config[key] = Array.isArray(value) ? value.slice() : value;
+        });
+        return config;
+    }
+
+    /* What the type radios and option fields should show for this card: the
+     * state's draft when a chip is open, otherwise the character's own entry. */
+    function selectEditTarget(state, name) {
+        var stateIndex = selectEditingStateIndex(state, name);
+        if (stateIndex === null) {
+            return { scope: 'character', entry: workingOf(state, name), index: null, chip: null };
+        }
+        var chips = selectStateChips(state, name);
+        var chip = chips[stateIndex] || null;
+        var draft = selectStateDraft(state, name);
+        var base = selectStateVersionEntry(state, name, stateIndex) || {};
+        var entry = {};
+        var keys = ['type', 'voice', 'character_style', 'ref_audio', 'ref_text',
+            'adapter_id', 'adapter_path', 'description', 'members'];
+        keys.forEach(function (key) {
+            if (draft && draft.entry && draft.entry[key] !== undefined) {
+                entry[key] = Array.isArray(draft.entry[key]) ? draft.entry[key].slice() : draft.entry[key];
+            } else if (base[key] !== undefined) {
+                entry[key] = Array.isArray(base[key]) ? base[key].slice() : base[key];
+            }
+        });
+        return {
+            scope: 'state',
+            entry: entry,
+            index: stateIndex,
+            chip: chip,
+            dirty: !!(draft && draft.dirty)
+        };
+    }
+
     function selectSuggestionTotal(state) {
         var byName = (state.suggestions && state.suggestions.byName) || {};
         var total = 0;
@@ -464,6 +648,19 @@
         selectStatePanel: selectStatePanel,
         selectSuggestionsFor: selectSuggestionsFor,
         selectSuggestionTotal: selectSuggestionTotal,
+        prettyAge: prettyAge,
+        titleise: titleise,
+        stateLabel: stateLabel,
+        versionKeysForStates: versionKeysForStates,
+        versionKeyForState: versionKeyForState,
+        selectStateChips: selectStateChips,
+        selectStateRow: selectStateRow,
+        selectStateFromIndex: selectStateFromIndex,
+        selectEditingStateIndex: selectEditingStateIndex,
+        selectStateVersionEntry: selectStateVersionEntry,
+        selectStateDraft: selectStateDraft,
+        selectEditTarget: selectEditTarget,
+        stateVersionEntry: stateVersionEntry,
         selectTraitBadge: selectTraitBadge,
         selectTraitStateCount: selectTraitStateCount,
         selectLoraModels: selectLoraModels,

@@ -107,6 +107,11 @@
             /* Per-character state timeline panels. */
             states: {},
 
+            /* State chips: which character is being edited as a STATE rather
+             * than as the whole character, and the unsaved draft for it. */
+            editingState: null,   // { name: <character>, index: <state index> }
+            stateDraft: {},       // <character> -> { index, type, voice, ...fields }
+
             /* Series Cast block. */
             cast: {
                 library: { casts: [], shared: [], current_characters: [] },
@@ -328,6 +333,55 @@
                     state.states = {};
                 }
                 return 'states';
+            }
+
+            /* ---- state chips ---- */
+
+            case 'state-edit/open': {
+                var chipName = text(command.name);
+                if (!chipName) { throw new Error('A state chip requires a character name.'); }
+                var chipIndex = typeof command.index === 'number' ? command.index : null;
+                if (chipIndex === null || chipIndex < 0) {
+                    throw new Error('A state chip requires a state index.');
+                }
+                state.editingState = { name: chipName, index: chipIndex };
+                state.stateDraft[chipName] = {
+                    index: chipIndex,
+                    dirty: false,
+                    entry: command.entry || {}
+                };
+                return 'state-edit';
+            }
+
+            case 'state-edit/close': {
+                if (command.name) {
+                    delete state.stateDraft[command.name];
+                    if (state.editingState && state.editingState.name === command.name) {
+                        state.editingState = null;
+                    }
+                } else {
+                    state.stateDraft = {};
+                    state.editingState = null;
+                }
+                return 'state-edit';
+            }
+
+            case 'state-draft/set': {
+                var draftName = text(command.name);
+                if (!draftName) { throw new Error('A state draft requires a character name.'); }
+                var draft = state.stateDraft[draftName];
+                if (!draft) {
+                    throw new Error('No open state draft for ' + draftName + '. Open a state chip first.');
+                }
+                // The index is fixed when the chip is opened: a draft cannot drift
+                // onto a different state while the user is typing into it.
+                if (typeof command.index === 'number' && command.index !== draft.index) {
+                    throw new Error('A state draft cannot change which state it edits.');
+                }
+                rejectNode(command.entry, 'entry');
+                draft.entry = command.entry || {};
+                draft.dirty = true;
+                return 'state-draft';
             }
 
             case 'cast/patch': {

@@ -123,7 +123,7 @@
 
     /* ---- ensemble members ---- */
 
-    function ensembleMembers(allNames, members, suggestions) {
+    function ensembleMembers(allNames, members, suggestions, scope) {
         var selected = members || [];
         var ordered = [];
         // Suggestions first so a freshly prefilled ensemble is visible, then the
@@ -139,7 +139,7 @@
             // assignment panel, so no per-checkbox owner attribute is needed.
             return '<div class="form-check">'
                 + '<input class="form-check-input ensemble-member" type="checkbox" value="' + attr(name) + '"'
-                + ' data-voicesv3-action="ensemble-member"'
+                + ' data-voicesv3-action="ensemble-member"' + (scope || '')
                 + (isSelected ? ' checked' : '') + '>'
                 + '<label class="form-check-label">' + escape(name) + '</label>'
                 + '</div>';
