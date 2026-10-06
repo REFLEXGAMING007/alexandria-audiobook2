@@ -160,6 +160,11 @@ class GeneratePersonasRequest(BaseModel):
     context_lines: int = Field(default=8, ge=1, le=200)
     speaker: Optional[str] = Field(default=None, max_length=200)
     age_group: Optional[str] = Field(default=None, max_length=40)
+    # "START:END" script-entry range. Set for a state row so the persona is built
+    # from that state's own lines and narration rather than the character's
+    # opening ones. Unset = the whole book, which is every non-state row's
+    # behaviour today.
+    entry_range: Optional[str] = Field(default=None, max_length=64)
     # Only characters with no entry in voice_config.json (the ones /api/voices
     # reports as persona_pending); the rest keep their persona and preview.
     # Issue #602: a script regenerated with more chapters should not re-roll
@@ -686,6 +691,8 @@ async def generate_personas(background_tasks: BackgroundTasks, request: Generate
         command.extend(["--speakers", request.speaker])
     if request.age_group:
         command.extend(["--age-group", request.age_group])
+    if request.entry_range:
+        command.extend(["--entry-range", request.entry_range])
     if request.advanced:
         batch_size = max(1, min(int(request.batch_size or 40), 200))
         command.extend(["--advanced", "--batch-size", str(batch_size)])

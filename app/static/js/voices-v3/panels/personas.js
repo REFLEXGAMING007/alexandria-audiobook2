@@ -187,6 +187,16 @@
                 context_lines: contextLineCount(state)
             };
             if (ageGroup) { payload.age_group = ageGroup; }
+            /* A state row also sends the SCRIPT-ENTRY range it covers, so the
+             * persona is written from that state's lines and the narration around
+             * them. Without it the prompt for a thirty-eight-year-old state was
+             * assembled from the character's sixteen-year-old lines, and the age
+             * instruction was the only thing asking the model to reconcile that. */
+            var range = options && options.entryRange;
+            if (range && typeof range.start === 'number' && typeof range.end === 'number'
+                && range.end > range.start) {
+                payload.entry_range = range.start + ':' + range.end;
+            }
 
             var response = await namespace.api.generatePersonas(payload);
             namespace.state.dispatch({

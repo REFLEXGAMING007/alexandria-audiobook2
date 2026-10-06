@@ -144,7 +144,22 @@
         applyFieldEdit(state.getState(), nameOf(node), field, node.value);
     }
 
-    function onRosterClick(event) {
+    /* The script-entry range a state row covers, read off the button.
+ * `end` is exclusive and absent for the last state, which runs to the end of
+ * the book - so the backend is given only `start` and it defaults `end` there. */
+function entryRangeOf(node) {
+    var start = node.getAttribute('data-voicesv3-from-entry');
+    if (start === null || start === '') { return null; }
+    var parsed = parseInt(start, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) { return null; }
+    var end = node.getAttribute('data-voicesv3-to-entry');
+    if (end === null || end === '') { return { start: parsed }; }
+    var parsedEnd = parseInt(end, 10);
+    if (!Number.isFinite(parsedEnd)) { return { start: parsed }; }
+    return { start: parsed, end: parsedEnd };
+}
+
+function onRosterClick(event) {
         var node = event.target;
         var actionNode = node.closest('[data-voicesv3-action]');
         if (!actionNode) { return; }
@@ -165,11 +180,12 @@
                 namespace.actions.removeStylePoint(speaker, indexOf(actionNode));
                 break;
             case 'persona-regenerate':
-                // A state-scoped button carries the age band; a character-scoped
-                // one carries no index and regenerates the character's own persona.
+                /* A state row carries the age band and the script-entry range it
+                 * covers; a plain row carries neither and regenerates the
+                 * character's own persona from the whole book. */
                 namespace.personasPanel.regenerateOne(name, {
-                    index: indexOf(actionNode),
-                    ageGroup: actionNode.getAttribute('data-voicesv3-age')
+                    ageGroup: actionNode.getAttribute('data-voicesv3-age'),
+                    entryRange: entryRangeOf(actionNode)
                 });
                 break;
             case 'persona-audit-edit':

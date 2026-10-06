@@ -190,51 +190,101 @@ _NARRATOR_LABELS = frozenset({"NARRATOR", "NARRATION", "NARRATIVE"})
 DEFAULT_CONTEXT_LINES = 8
 
 
+def _even_sample(items, count):
+    """`count` items spread evenly across `items`, preserving order.
+
+    A prefix is the wrong choice once the list spans the whole book: taking the
+    first N narrator lines is always the opening chapter, which described every
+    character as whatever they were in chapter 1.
+    """
+    items = list(items)
+    total = len(items)
+    count = max(1, int(count))
+    if total <= count:
+        return items
+    if count == 1:
+        return [items[total // 2]]
+    step = (total - 1) / (count - 1)
+    return [items[round(index * step)] for index in range(count)]
+
+
 def select_persona_context(lines, narrator_context, context_lines=DEFAULT_CONTEXT_LINES):
-    """-> (sample_text, intro_blob) for the persona prompt: the first
-    `context_lines` spoken lines and up to as many narrator lines (#522 12.1:
-    10 / 25 / 50 / 100 or custom, from the Voices tab)."""
+    """-> (sample_text, intro_blob) for the persona prompt.
+
+    Spoken lines: the first `context_lines` of the character, as documented and as
+    always (#522 12.1: 10 / 25 / 50 / 100 or custom, from the Voices tab). When the
+    caller has already sliced `lines` to one settled state, that slice IS this
+    character's state, so the prefix is the state.
+
+    Narrator lines: an even sample across everything collected. These span the
+    whole book, so a prefix would always be the opening chapter.
+    """
     n = max(1, int(context_lines or DEFAULT_CONTEXT_LINES))
     sample_text = "\n".join(lines[:n])
-    intro = narrator_context[:n]
+    intro = _even_sample(narrator_context, n)
     intro_blob = "\n".join(intro) if intro else "(No nearby narrator intro lines found.)"
     return sample_text, intro_blob
 
 
-def _collect_narrator_context(script, speaker, window=4):
-    """Gather unique narrator lines within `window` entries (before and after) of any appearance.
+_ATTRIBUTION_TAG = re.compile(
+    r"^(?:[a-z][a-z' ]*)?\b"
+    r"(said|replied|asked|answered|added|continued|muttered|murmured|whispered|shouted"
+    r"|cried|repeated|laughed|sighed|agreed|objected|insisted|offered|concluded|returned"
+    r"|observed|noted|stated|exclaimed|urged|wondered|frowned|smiled|growled|drawled"
+    r"|blurted|murmur|commented|replied)"
+    r"(?:\s+to\s+[a-z ]+)?[.,]?$", re.IGNORECASE)
+
+
+def _is_attribution_tag(text):
+    """True for a bare "Maro said." / "his son said." entry.
+
+    The segment prompt requires an attribution tag to be preserved as its own
+    NARRATOR entry, so these are genuinely narrator-labelled and the context
+    collector picks them up. They carry no information about the world or the
+    speaker - "Maro said." tells a persona writer nothing - and they crowd real
+    narration out of a ten-line budget. Deliberately conservative: it only
+    matches a short phrase whose whole content is one speech verb, so ordinary
+    short narration ("Rain fell.") is kept.
+    """
+    stripped = str(text or "").strip()
+    if len(stripped) > 40 or len(stripped) < 4:
+        return False
+    return bool(_ATTRIBUTION_TAG.match(stripped))
+
+
+def _collect_narrator_context(script, speaker, window=4, entry_range=None):
+    """Gather unique narrator lines within `window` entries of ANY appearance.
 
     - Scans both before and after each appearance.
-    - Looks at all appearances, not just the first.
-    - Accepts any speaker labels in _NARRATOR_LABELS.
+    - Looks at ALL appearances. This used to `return` as soon as it had `window`
+      lines, so in practice it only ever read the character's FIRST window - the
+      docstring claimed otherwise and the code did not. Removed: the caller takes
+      an even sample of what comes back, so collecting the whole book is what
+      makes that sample representative rather than chapter 1 forever.
+    - `entry_range` (start, end) restricts both the search and the speaker's own
+      appearances to one settled state, so a state persona is described by the
+      narration around THAT state.
     """
     context_lines = []
     seen_lines = set()
     window = max(1, int(window or 4))
+    lo, hi = entry_range if entry_range else (0, len(script))
 
-    # Find all indices of the speaker's appearances in the script
-    speaker_indices = []
-    for i, entry in enumerate(script):
-        if _entry_speaker(entry) == speaker:
-            speaker_indices.append(i)
+    speaker_indices = [i for i, entry in enumerate(script)
+                       if lo <= i < hi and _entry_speaker(entry) == speaker]
 
-    # For each appearance, look at the window around it
     for idx in speaker_indices:
-        # Check before and after
-        start_idx = max(0, idx - window)
-        end_idx = min(len(script), idx + window + 1)
+        start_idx = max(lo, idx - window)
+        end_idx = min(hi, idx + window + 1)
         for j in range(start_idx, end_idx):
             if j == idx:
                 continue
-            entry = script[j]
-            entry_speaker = _entry_speaker(entry).upper()
-            entry_text = _entry_text(entry)
-            if entry_speaker in _NARRATOR_LABELS and entry_text:
-                if entry_text not in seen_lines:
-                    seen_lines.add(entry_text)
-                    context_lines.append(entry_text)
-                    if len(context_lines) >= window:
-                        return context_lines
+            entry_speaker = _entry_speaker(script[j]).upper()
+            entry_text = _entry_text(script[j])
+            if (entry_speaker in _NARRATOR_LABELS and entry_text
+                    and entry_text not in seen_lines and not _is_attribution_tag(entry_text)):
+                seen_lines.add(entry_text)
+                context_lines.append(entry_text)
 
     return context_lines
 
@@ -954,6 +1004,12 @@ def main():
     parser.add_argument("--batch-size", type=int, default=40, help="Script entries per advanced discovery batch")
     parser.add_argument("--speakers", default="", help="Optional comma-separated speaker allowlist")
     parser.add_argument("--age-group", default="", help="Optional age profile to store as a separate voice version")
+    parser.add_argument("--entry-range", default="",
+                        help="Optional START:END script-entry range to build the persona from. "
+                             "Restricts BOTH the character's spoken lines and the narrator "
+                             "context to that window, so one settled state is described by its "
+                             "own lines instead of the character's opening ones. Omitted = the "
+                             "whole book, unchanged.")
     parser.add_argument("--recovered-speaker", default="", help="Use the saved persona for this speaker and resume preview generation")
     parser.add_argument("--narration-window", type=int, default=4, help="How many preceding narrator lines to include as intro context")
     parser.add_argument("--context-lines", type=int, default=DEFAULT_CONTEXT_LINES,
@@ -975,11 +1031,34 @@ def main():
         book_snapshot = get_book_snapshot(data_dir)
     script = json.loads(book_snapshot["script_bytes"])
 
-    # Collect sample lines per speaker + first-appearance narrator context
+    # Collect sample lines per speaker + narrator context.
+    #
+    # `--entry-range` narrows BOTH to one settled state. Without it the persona
+    # for a thirty-eight-year-old state was assembled from the character's
+    # sixteen-year-old lines and the opening chapter's narration, with only a
+    # one-line instruction asking the model to reconcile them. It always complied,
+    # and the result was an invented voice with nothing to show for it.
+    entry_range = None
+    if args.entry_range.strip():
+        raw_start, _, raw_end = args.entry_range.strip().partition(":")
+        try:
+            start = max(0, int(raw_start or 0))
+            end = int(raw_end) if raw_end.strip() else len(script)
+        except ValueError:
+            print(f"Error: --entry-range must be START:END, got {args.entry_range!r}")
+            return 1
+        if end <= start:
+            print(f"Error: --entry-range end ({end}) must be greater than start ({start})")
+            return 1
+        entry_range = (start, end)
+        print(f"Persona input restricted to entries {start}..{end}")
+
     samples = {}
-    for entry in script:
+    for index, entry in enumerate(script):
         speaker = _entry_speaker(entry)
         if not speaker:
+            continue
+        if entry_range and not (entry_range[0] <= index < entry_range[1]):
             continue
         samples.setdefault(speaker, []).append(entry.get("text", "").strip())
 
@@ -987,7 +1066,7 @@ def main():
     context_lines = max(1, min(int(args.context_lines or DEFAULT_CONTEXT_LINES), 200))
     window = max(1, int(args.narration_window or 4), context_lines // 2)
     for speaker in samples.keys():
-        narrator_context[speaker] = _collect_narrator_context(script, speaker, window)
+        narrator_context[speaker] = _collect_narrator_context(script, speaker, window, entry_range)
 
     # Load existing voice_config (preserve other fields)
     voice_config = copy.deepcopy(book_snapshot["voices"])

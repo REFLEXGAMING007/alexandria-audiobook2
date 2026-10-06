@@ -332,6 +332,10 @@
             + '<button class="btn btn-sm btn-outline-primary mt-1" type="button" data-voicesv3-action="persona-regenerate"'
             + ' data-voicesv3-name="' + attr(key) + '"'
             + (row.ageGroup ? ' data-voicesv3-age="' + attr(row.ageGroup) + '"' : '')
+            + (row.isState && row.fromEntry != null
+                ? ' data-voicesv3-from-entry="' + Number(row.fromEntry) + '"'
+                  + (row.toEntry != null ? ' data-voicesv3-to-entry="' + Number(row.toEntry) + '"' : '')
+                : '')
             + ' aria-label="' + attr((row.isState ? 'Regenerate persona for ' + name + ' in the '
                 + row.ageGroup.replace(/_/g, ' ') + ' state' : 'Regenerate persona for ' + name)) + '">'
             + '<i class="fas fa-rotate me-1"></i>Regenerate persona</button>'
@@ -363,16 +367,18 @@
             + '</div></div></div>';
     }
 
-    /* Marks a card as one settled state of a character, and says whether that
-     * state has a voice yet. The title stays the character's own name, so nothing
-     * that matches on the visible name changes. */
+    /* Marks a card as one settled state of a character. The title stays the
+     * character's own name, so nothing matching on the visible name changes -
+     * which means this badge has to carry the band, or three rows all titled
+     * MARO would be indistinguishable. Solid border means the state has a voice. */
     function stateBadge(row) {
-        var label = 'state';
-        var css = 'vv3-state-badge';
-        if (row.hasVersion) { label = 'voice set'; css += ' is-set'; }
-        return '<span class="' + css + '" title="This card is one settled state of '
-            + escape(row.name) + '. Its voice is saved under versions.'
-            + escape(row.ageGroup) + '.">' + escape(label) + '</span>';
+        var band = (row.ageGroup || '').replace(/_/g, ' ');
+        var css = 'vv3-state-badge' + (row.hasVersion ? ' is-set' : '');
+        return '<span class="' + css + '" title="' + attr(
+            'This card is the ' + band + ' state of ' + row.name
+            + '. Its voice is saved under versions.' + row.ageGroup
+            + (row.hasVersion ? '.' : '. No voice generated for this state yet.')) + '">'
+            + escape(band) + '</span>';
     }
 
     namespace.cardPanel = {

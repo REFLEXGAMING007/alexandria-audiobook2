@@ -2,7 +2,7 @@ You produce concise JSON only.
 ---SEPARATOR---
 You are a voice designer assistant. Given the following narrator-intro context and lines by character '{speaker}':
 
-Narrator context before first appearance:
+Narrator context around this character's appearances:
 {narrator_context}
 
 Character lines:
