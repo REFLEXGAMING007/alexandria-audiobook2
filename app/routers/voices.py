@@ -317,6 +317,13 @@ def get_voice_rows(script_data, voice_config, expand_states=False):
                 # the `Aiden` default), and a placeholder that looks like a real
                 # voice can be saved by accident.
                 "config": dict(saved) if isinstance(saved, dict) else {},
+                # The character's OWN entry, so the save can rebuild a complete
+                # versions dict. `_apply_voice_save` replaces `versions` wholesale
+                # rather than merging per version, so a state save that carried only
+                # the edited version would destroy its siblings. There is no plain
+                # row for this character to read the base from - state rows replace
+                # it - so the projection supplies it directly.
+                "base_config": entry,
                 "has_version": isinstance(saved, dict),
                 # Approval and readiness stay character level, so the row keeps
                 # the character's own values rather than inventing per-state ones.

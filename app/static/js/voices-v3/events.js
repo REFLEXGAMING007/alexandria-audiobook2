@@ -120,7 +120,7 @@
         if (node.classList && node.classList.contains('clone-voice-file-input')) {
             var file = node.files && node.files[0];
             var owner = nameOf(node);
-            if (file) { namespace.actions.uploadCloneVoice(owner, file, isStateScoped(node)); }
+            if (file) { namespace.actions.uploadCloneVoice(selectors.speakerOf(storeState, owner), file, isStateScoped(node)); }
             // Reset so re-picking the same file fires another change event.
             node.value = '';
             return;
@@ -202,10 +202,17 @@
         var storeState = state.getState();
         var name = actionNode.getAttribute('data-voicesv3-name');
 
+        /* `name` here is the row key: "MARO" for a plain row, "MARO#adult" for one
+         * settled state. Store writes use the key; every speaker-scoped API call
+         * must use the CHARACTER, or it addresses a speaker that does not exist.
+         * Resolving it once here keeps the nine call sites below from each having
+         * to remember. */
+        var speaker = selectors.speakerOf(storeState, name);
+
         switch (action) {
             case 'style-point-remove':
                 event.preventDefault();
-                namespace.actions.removeStylePoint(name, indexOf(actionNode));
+                namespace.actions.removeStylePoint(speaker, indexOf(actionNode));
                 break;
             case 'persona-regenerate':
                 // A state-scoped button carries the age band; a character-scoped
@@ -216,19 +223,19 @@
                 });
                 break;
             case 'persona-audit-edit':
-                namespace.actions.editPersonaVoiceAudit(name);
+                namespace.actions.editPersonaVoiceAudit(speaker);
                 break;
             case 'approval':
-                namespace.actions.setApproval(name, actionNode.getAttribute('data-voicesv3-field'), valueOf(actionNode));
+                namespace.actions.setApproval(speaker, actionNode.getAttribute('data-voicesv3-field'), valueOf(actionNode));
                 break;
             case 'version-select':
-                namespace.actions.selectVersion(name, actionNode.value);
+                namespace.actions.selectVersion(speaker, actionNode.value);
                 break;
             case 'version-add':
-                namespace.actions.addVersion(name);
+                namespace.actions.addVersion(speaker);
                 break;
             case 'version-generate-age':
-                namespace.actions.generateAgeVersion(name, actionNode.getAttribute('data-voicesv3-age'));
+                namespace.actions.generateAgeVersion(speaker, actionNode.getAttribute('data-voicesv3-age'));
                 break;
             case 'states-open':
                 namespace.statesPanel.open(storeState, name);
@@ -255,25 +262,25 @@
                 namespace.suggestionsPanel.applyOne(name, actionNode.getAttribute('data-voicesv3-id'));
                 break;
             case 'candidate-select':
-                namespace.actions.selectCandidate(name, actionNode.getAttribute('data-voicesv3-id'));
+                namespace.actions.selectCandidate(speaker, actionNode.getAttribute('data-voicesv3-id'));
                 break;
             case 'candidate-delete':
-                namespace.actions.deleteCandidate(name, actionNode.getAttribute('data-voicesv3-id'));
+                namespace.actions.deleteCandidate(speaker, actionNode.getAttribute('data-voicesv3-id'));
                 break;
             case 'candidate-favorite':
-                namespace.actions.favoriteCandidate(name, actionNode.getAttribute('data-voicesv3-id'), valueOf(actionNode) === 'true');
+                namespace.actions.favoriteCandidate(speaker, actionNode.getAttribute('data-voicesv3-id'), valueOf(actionNode) === 'true');
                 break;
             case 'clone-upload':
                 triggerCloneFilePicker(name);
                 break;
             case 'clone-play':
-                namespace.actions.playCloneVoice(name, isStateScoped(actionNode));
+                namespace.actions.playCloneVoice(speaker, isStateScoped(actionNode));
                 break;
             case 'clone-delete':
-                namespace.actions.deleteCloneVoice(name);
+                namespace.actions.deleteCloneVoice(speaker);
                 break;
             case 'design-open':
-                namespace.actions.openVoiceDesigner(name, actionNode);
+                namespace.actions.openVoiceDesigner(speaker, actionNode);
                 break;
             case 'seed-repair':
                 namespace.actions.applyStableVoiceSeeds();

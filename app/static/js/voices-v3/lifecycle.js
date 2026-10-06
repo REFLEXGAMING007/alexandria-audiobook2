@@ -119,8 +119,14 @@
         if (Array.isArray(rosterList)) {
             rosterList.forEach(function (entry) {
                 if (!entry || !entry.name) { return; }
-                names.push(entry.name);
-                byName[entry.name] = entry;
+                // Key by row_key, which is the character name for a plain row and
+                // "NAME#age" for one settled state. `name` alone would collapse a
+                // multi-state character onto one key, so its three cards would
+                // share one working entry and one save slot.
+                var key = entry.row_key || entry.name;
+                if (byName[key]) { return; }
+                names.push(key);
+                byName[key] = entry;
             });
         }
         state.dispatch({ type: 'roster/set', roster: { names: names, byName: byName } });

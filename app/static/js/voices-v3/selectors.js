@@ -42,6 +42,50 @@
         return working && typeof working === 'object' ? working : {};
     }
 
+    /* ------------------------------------------------------------------ */
+    /* row identity                                                         */
+    /* ------------------------------------------------------------------ */
+    /* A roster row's KEY is its `row_key`, which for a state row is
+     * "MARO#adult". Two identities travel with every row and mixing them up is
+     * the failure this whole design exists to prevent:
+     *
+     *   key ("MARO#adult")   identifies the row. The store, the DOM attribute and
+     *                        the save map are keyed by this. Three states of one
+     *                        character are three distinct keys.
+     *   speaker ("MARO")     identifies the character in voice_config.json and in
+     *                        every speaker-scoped API path. A state row must never
+     *                        reach an API under its key, or it would address a
+     *                        character that does not exist.
+     *
+     * `name` stays the character's own name for display, so nothing that matches
+     * on the visible name changes.
+     */
+
+    function rowOf(state, key) {
+        return rosterOf(state).byName[key] || null;
+    }
+
+    function speakerOf(state, key) {
+        var row = rowOf(state, key);
+        if (!row) { return typeof key === 'string' ? key.split('#')[0] : ''; }
+        return row.speaker || row.name || '';
+    }
+
+    /* Is this row one settled state of a character, rather than the character? */
+    function isStateRow(state, key) {
+        var row = rowOf(state, key);
+        if (!row) { return false; }
+        return key !== (row.speaker || row.name);
+    }
+
+    /* The age band a state row is stored under, or null for a plain row. */
+    function stateAgeGroup(state, key) {
+        var row = rowOf(state, key);
+        if (!row || !isStateRow(state, key)) { return null; }
+        var band = text(row.age_group);
+        return band && band !== 'unknown' ? band : null;
+    }
+
     function loraById(state) {
         var index = {};
         arrayOf(state.catalogues && state.catalogues.lora).forEach(function (model) {
@@ -121,13 +165,81 @@
         return merged;
     }
 
+    /* The save map, keyed by CHARACTER, not by row.
+     *
+     * State rows do not become top-level entries. Their fields are written into
+     * the character's `versions` under their age band, which is exactly where
+     * generate_personas.py already puts a state persona, so the two agree.
+     *
+     * `_apply_voice_save` merges each character with a SHALLOW dict update:
+     *
+     *     updated[name] = {**existing, **config}
+     *
+     * and VoiceConfigItem.versions is a plain dict. A payload carrying `versions`
+     * therefore REPLACES the whole versions dict rather than merging into it, so
+     * a state save that emitted only the edited version would silently destroy
+     * its siblings. Every version is therefore rebuilt here: the stored ones,
+     * with this row's fields layered over its own band. */
     function buildVoiceDocument(state) {
         var roster = rosterOf(state);
         var document_ = {};
-        roster.names.forEach(function (name) {
-            document_[name] = buildEntry(state, name);
+        var versions = {};
+        var seeded = {};
+
+        roster.names.forEach(function (key) {
+            var speaker = speakerOf(state, key);
+            if (!speaker) { return; }
+            var band = stateAgeGroup(state, key);
+
+            if (!band) {
+                document_[speaker] = buildEntry(state, key);
+                return;
+            }
+            if (!versions[speaker]) { versions[speaker] = {}; }
+            /* Seed from the server's versions ONCE per character, before any row
+             * writes. Doing it per row would let a later row's copy of the stale
+             * stored values overwrite an EARLIER row's edit - two state rows saved
+             * together would silently lose the first one. */
+            if (!seeded[speaker]) {
+                seeded[speaker] = true;
+                var base = baseConfigOf(state, key);
+                var existing = base && typeof base.versions === 'object' ? base.versions : {};
+                Object.keys(existing).forEach(function (versionId) {
+                    versions[speaker][versionId] = existing[versionId];
+                });
+            }
+            versions[speaker][band] = buildEntry(state, key);
+        });
+
+        Object.keys(versions).forEach(function (speaker) {
+            if (!document_[speaker]) {
+                document_[speaker] = Object.assign({}, baseConfigOfFirstRow(state, speaker));
+            }
+            document_[speaker].versions = versions[speaker];
         });
         return document_;
+    }
+
+    /* The character's own entry, which the projection attaches to a state row
+     * because state rows replace that row and nothing else would carry it. */
+    function baseConfigOf(state, key) {
+        var row = rowOf(state, key);
+        var base = row && row.base_config;
+        return base && typeof base === 'object' ? base : {};
+    }
+
+    function baseConfigOfFirstRow(state, speaker) {
+        var byName = rosterOf(state).byName;
+        var keys = Object.keys(byName);
+        for (var index = 0; index < keys.length; index += 1) {
+            var row = byName[keys[index]];
+            if ((row.speaker || row.name) !== speaker) { continue; }
+            if (row.base_config && typeof row.base_config === 'object') {
+                return row.base_config;
+            }
+            if (row.config && typeof row.config === 'object') { return row.config; }
+        }
+        return {};
     }
 
     /* ------------------------------------------------------------------ */
@@ -626,6 +738,10 @@
         arrayOf: arrayOf,
         storedConfig: storedConfig,
         workingOf: workingOf,
+        rowOf: rowOf,
+        speakerOf: speakerOf,
+        isStateRow: isStateRow,
+        stateAgeGroup: stateAgeGroup,
         loraById: loraById,
         buildTypeFields: buildTypeFields,
         preservedMetadata: preservedMetadata,
