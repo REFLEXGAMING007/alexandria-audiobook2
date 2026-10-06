@@ -178,6 +178,21 @@
             + '<button type="button" class="btn btn-sm btn-success" data-voicesv3-action="state-apply"'
             + ' data-voicesv3-name="' + attr(name) + '" data-voicesv3-index="' + target.index + '"'
             + (fromIndex === null ? ' disabled' : '') + '>Save this state\u2019s voice</button>'
+            /* Persona generation for ONE state. The character-level Regenerate
+             * persona button is hidden while a chip is open, because its persona
+             * would be written to the character entry rather than to this state's
+             * version. This one passes the age band, and the backend stores the
+             * result as versions[age_group] - the same key Save writes. */
+            + (chip && chip.ageGroup && chip.ageGroup !== 'unknown'
+                ? '<button type="button" class="btn btn-sm btn-outline-primary"'
+                  + ' data-voicesv3-action="persona-regenerate"'
+                  + ' data-voicesv3-name="' + attr(name) + '"'
+                  + ' data-voicesv3-index="' + target.index + '"'
+                  + ' data-voicesv3-age="' + attr(chip.ageGroup) + '"'
+                  + ' aria-label="' + attr('Generate a persona for ' + name + ' in the '
+                      + (chip.label || 'selected') + ' state') + '">'
+                  + '<i class="fas fa-wand-magic-sparkles me-1"></i>Generate persona for this state</button>'
+                : '')
             + '<button type="button" class="btn btn-sm btn-outline-secondary" data-voicesv3-action="state-close"'
             + ' data-voicesv3-name="' + attr(name) + '">Done</button>'
             + (dirty ? '<span class="vv3-state-editor-dirty">unsaved</span>' : '')

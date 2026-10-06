@@ -130,8 +130,12 @@
                 var kept = await keepCurrentVoicesIfAsked(state);
                 if (!kept) { return; }
             }
+            // Field names must match GeneratePersonasRequest exactly. Pydantic
+            // ignores unknown keys, so a wrong name is dropped silently rather
+            // than rejected: `only_missing` here meant every persona was
+            // re-rolled regardless of the scope filter.
             var response = await namespace.api.generatePersonas({
-                only_missing: scopeIsNew,
+                new_only: scopeIsNew,
                 batch_size: parseInt(state.persona.batchSize, 10) || 40,
                 context_lines: contextLineCount(state)
             });
@@ -160,28 +164,46 @@
         }
     }
 
-    async function regenerateOne(name) {
-        if (!namespace.actions.claimPersona()) { return; }
+    /* `options.ageGroup` turns this into a PER-STATE persona.
+     *
+     * The backend supports it: generate_personas.py takes --age-group, tells the
+     * LLM which age profile to write for, and stores the result as
+     * versions[age_group] instead of overwriting the character's own entry. That
+     * is the same key a state chip saves under, so a state persona pre-fills the
+     * chip rather than colliding with it.
+     *
+     * The character filter is `speaker` (singular). Sending `characters` looked
+     * plausible and was silently dropped by the request model, which made this
+     * regenerate EVERY character in the book instead of the one clicked. */
+    async function regenerateOne(name, options) {
+        if (!namespace.actions.claimPersona()) { return false; }
         try {
             var state = namespace.state.getState();
-            var response = await namespace.api.generatePersonas({
-                only_missing: false,
-                characters: [name],
+            var ageGroup = options && options.ageGroup ? String(options.ageGroup) : '';
+            var payload = {
+                speaker: name,
+                new_only: false,
                 batch_size: 1,
                 context_lines: contextLineCount(state)
-            });
+            };
+            if (ageGroup) { payload.age_group = ageGroup; }
+
+            var response = await namespace.api.generatePersonas(payload);
             namespace.state.dispatch({
                 type: 'persona/patch',
                 running: true,
-                status: 'Regenerating the persona for ' + name + '…'
+                status: 'Regenerating the persona for ' + name
+                    + (ageGroup ? ' (' + ageGroup.replace(/_/g, ' ') + ')' : '') + '…'
             });
             namespace.lifecycle.startPersonaPolling();
             if (response && response.message) {
                 namespace.state.dispatch({ type: 'persona/patch', status: String(response.message) });
             }
+            return true;
         } catch (error) {
             core.notifyFailure('Could not regenerate the persona for ' + name, error,
                 'Reload Voices and check the persona status before trying again.');
+            return false;
         } finally {
             namespace.actions.releasePersona();
         }

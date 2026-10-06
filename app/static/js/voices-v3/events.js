@@ -208,7 +208,12 @@
                 namespace.actions.removeStylePoint(name, indexOf(actionNode));
                 break;
             case 'persona-regenerate':
-                namespace.personasPanel.regenerateOne(name);
+                // A state-scoped button carries the age band; a character-scoped
+                // one carries no index and regenerates the character's own persona.
+                namespace.personasPanel.regenerateOne(name, {
+                    index: indexOf(actionNode),
+                    ageGroup: actionNode.getAttribute('data-voicesv3-age')
+                });
                 break;
             case 'persona-audit-edit':
                 namespace.actions.editPersonaVoiceAudit(name);
