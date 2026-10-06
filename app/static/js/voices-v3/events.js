@@ -87,20 +87,23 @@
 
     function onRosterChange(event) {
         var node = event.target;
+        var storeState = state.getState();
+        var name = nameOf(node);
 
         // The clone upload control is a file input, so it arrives here rather than
         // through the action table.
         if (node.classList && node.classList.contains('clone-voice-file-input')) {
             var file = node.files && node.files[0];
-            var owner = nameOf(node);
-            if (file) { namespace.actions.uploadCloneVoice(selectors.speakerOf(storeState, owner), file); }
+            /* `name`, not `speakerOf(...)`: the upload is a ROW-LOCAL write, and
+             * uploadCloneVoice persists under versions[age_group] for a state row.
+             * Collapsing to the character put the file on the base entry instead.
+             * This also read `storeState` before it was assigned - the var was
+             * hoisted, so it was undefined here and speakerOf got no roster. */
+            if (file) { namespace.actions.uploadCloneVoice(name, file); }
             // Reset so re-picking the same file fires another change event.
             node.value = '';
             return;
         }
-
-        var storeState = state.getState();
-        var name = nameOf(node);
 
         if (node.classList && node.classList.contains('ensemble-member')) {
             applyFieldEdit(storeState, name, 'members',
@@ -233,14 +236,21 @@ function onRosterClick(event) {
             case 'clone-upload':
                 triggerCloneFilePicker(name);
                 break;
+            /* `name`, not `speaker`: these read and write ROW-LOCAL state via
+             * selectors.workingOf/storedConfig, which are keyed by the roster row.
+             * Handing them the character collapsed "MARO#adult" to "MARO", so a
+             * state row's own reference audio was invisible to its play button -
+             * it reported "no reference audio for MARO" while the row's field was
+             * visibly full. Same latent bug would have let one state row's delete
+             * target another row's reference. */
             case 'clone-play':
-                namespace.actions.playCloneVoice(speaker);
+                namespace.actions.playCloneVoice(name);
                 break;
             case 'clone-delete':
-                namespace.actions.deleteCloneVoice(speaker);
+                namespace.actions.deleteCloneVoice(name);
                 break;
             case 'design-open':
-                namespace.actions.openVoiceDesigner(speaker, actionNode);
+                namespace.actions.openVoiceDesigner(name, actionNode);
                 break;
             case 'seed-repair':
                 namespace.actions.applyStableVoiceSeeds();
