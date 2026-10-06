@@ -180,10 +180,12 @@ function onRosterClick(event) {
                 namespace.actions.removeStylePoint(speaker, indexOf(actionNode));
                 break;
             case 'persona-regenerate':
-                /* A state row carries the age band and the script-entry range it
-                 * covers; a plain row carries neither and regenerates the
-                 * character's own persona from the whole book. */
-                namespace.personasPanel.regenerateOne(name, {
+                /* `speaker`, not `name`: the request filter is the CHARACTER, and
+                 * _require_script_speaker rejects anything not in the script - so a
+                 * row key here 404s with "Speaker is not present in the active
+                 * script". A state row additionally carries the age band and the
+                 * script-entry range it covers; a plain row carries neither. */
+                namespace.personasPanel.regenerateOne(speaker, {
                     ageGroup: actionNode.getAttribute('data-voicesv3-age'),
                     entryRange: entryRangeOf(actionNode)
                 });
@@ -217,7 +219,7 @@ function onRosterClick(event) {
                 namespace.suggestionsPanel.suggestMore(storeState, name);
                 break;
             case 'suggestion-apply':
-                namespace.suggestionsPanel.applyOne(name, actionNode.getAttribute('data-voicesv3-id'));
+                namespace.suggestionsPanel.applyOne(speaker, actionNode.getAttribute('data-voicesv3-id'));
                 break;
             case 'candidate-select':
                 namespace.actions.selectCandidate(speaker, actionNode.getAttribute('data-voicesv3-id'));

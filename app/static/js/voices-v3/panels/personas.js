@@ -175,13 +175,16 @@
      * The character filter is `speaker` (singular). Sending `characters` looked
      * plausible and was silently dropped by the request model, which made this
      * regenerate EVERY character in the book instead of the one clicked. */
-    async function regenerateOne(name, options) {
+    /* `speaker` is the CHARACTER name, never a roster row key. The request's
+     * speaker field is validated against the script, so a row key ("MARO#adult")
+     * is rejected with "Speaker is not present in the active script". */
+    async function regenerateOne(speaker, options) {
         if (!namespace.actions.claimPersona()) { return false; }
         try {
             var state = namespace.state.getState();
             var ageGroup = options && options.ageGroup ? String(options.ageGroup) : '';
             var payload = {
-                speaker: name,
+                speaker: speaker,
                 new_only: false,
                 batch_size: 1,
                 context_lines: contextLineCount(state)
@@ -202,7 +205,7 @@
             namespace.state.dispatch({
                 type: 'persona/patch',
                 running: true,
-                status: 'Regenerating the persona for ' + name
+                status: 'Regenerating the persona for ' + speaker
                     + (ageGroup ? ' (' + ageGroup.replace(/_/g, ' ') + ')' : '') + '…'
             });
             namespace.lifecycle.startPersonaPolling();
@@ -211,7 +214,7 @@
             }
             return true;
         } catch (error) {
-            core.notifyFailure('Could not regenerate the persona for ' + name, error,
+            core.notifyFailure('Could not regenerate the persona for ' + speaker, error,
                 'Reload Voices and check the persona status before trying again.');
             return false;
         } finally {
