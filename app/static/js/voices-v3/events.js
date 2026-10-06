@@ -37,15 +37,6 @@
         return Number.isFinite(parsed) ? parsed : null;
     }
 
-    /* Is this control bound to an open state chip rather than to the character?
-     *
-     * The card marks every type control with `data-voicesv3-target="state"`
-     * while a state chip is open, and the same handlers below serve both scopes,
-     * so nothing has to be rebound when a chip opens or closes.
-     */
-    function isStateScoped(node) {
-        return !!node && node.getAttribute('data-voicesv3-target') === 'state';
-    }
 
     /* ------------------------------------------------------------------ */
     /* working-configuration edits                                         */
@@ -65,24 +56,6 @@
         namespace.saveController.scheduleSave();
     }
 
-    /* A state draft is deliberately NOT autosaved.
-     *
-     * A state's voice is not a field of the character entry, so there is nowhere
-     * for it to go in the autosave document. It stays local until the user
-     * presses "Save this state's voice", which is also what keeps the base save
-     * contract untouched.
-     */
-    function applyStateDraftEdit(storeState, node, name, field, value) {
-        var draft = selectors.selectStateDraft(storeState, name);
-        if (!draft) { return; }
-        var entry = Object.assign({}, draft.entry);
-        if (field === 'members') {
-            entry.members = Array.isArray(value) ? value.slice() : [];
-        } else {
-            entry[field] = value;
-        }
-        state.dispatch({ type: 'state-draft/set', name: name, index: draft.index, entry: entry });
-    }
 
     /* Switching voice type keeps the values already entered for the other
      * families, exactly as the original tab does: only the visible block
@@ -120,7 +93,7 @@
         if (node.classList && node.classList.contains('clone-voice-file-input')) {
             var file = node.files && node.files[0];
             var owner = nameOf(node);
-            if (file) { namespace.actions.uploadCloneVoice(selectors.speakerOf(storeState, owner), file, isStateScoped(node)); }
+            if (file) { namespace.actions.uploadCloneVoice(selectors.speakerOf(storeState, owner), file); }
             // Reset so re-picking the same file fires another change event.
             node.value = '';
             return;
@@ -128,26 +101,17 @@
 
         var storeState = state.getState();
         var name = nameOf(node);
-        var scoped = isStateScoped(node);
 
         if (node.classList && node.classList.contains('ensemble-member')) {
-            var members = collectEnsembleMembers(node.closest('.voice-card'), name);
-            if (scoped) {
-                applyStateDraftEdit(storeState, node, name, 'members', members);
-            } else {
-                applyFieldEdit(storeState, name, 'members', members);
-            }
+            applyFieldEdit(storeState, name, 'members',
+                collectEnsembleMembers(node.closest('.voice-card'), name));
             return;
         }
 
         var action = actionOf(node);
 
         if (action === 'type-set') {
-            if (scoped) {
-                applyStateDraftEdit(storeState, node, name, 'type', node.value);
-            } else {
-                applyTypeChange(storeState, name, node.value);
-            }
+            applyTypeChange(storeState, name, node.value);
             return;
         }
         if (action === 'ready-toggle') {
@@ -155,11 +119,7 @@
             return;
         }
         if (action === 'reference-select') {
-            if (scoped) {
-                applyStateDraftReference(storeState, name, node.value);
-            } else {
-                applyReferenceSelection(storeState, name, node.value);
-            }
+            applyReferenceSelection(storeState, name, node.value);
             return;
         }
 
@@ -167,11 +127,7 @@
         if (field) {
             var value = node.value;
             if (node.type === 'checkbox') { value = !!node.checked; }
-            if (scoped) {
-                applyStateDraftEdit(storeState, node, name, field, value);
-            } else {
-                applyFieldEdit(storeState, name, field, value);
-            }
+            applyFieldEdit(storeState, name, field, value);
             return;
         }
 
@@ -185,13 +141,7 @@
         var node = event.target;
         var field = fieldOf(node);
         if (!field) { return; }
-        var storeState = state.getState();
-        var name = nameOf(node);
-        if (isStateScoped(node)) {
-            applyStateDraftEdit(storeState, node, name, field, node.value);
-            return;
-        }
-        applyFieldEdit(storeState, name, field, node.value);
+        applyFieldEdit(state.getState(), nameOf(node), field, node.value);
     }
 
     function onRosterClick(event) {
@@ -243,15 +193,7 @@
             case 'states-apply':
                 namespace.statesPanel.apply(storeState, name);
                 break;
-            case 'state-chip':
-                namespace.statesPanel.openChip(storeState, name, indexOf(actionNode));
-                break;
-            case 'state-apply':
-                namespace.statesPanel.applyChip(storeState, name, indexOf(actionNode));
-                break;
-            case 'state-close':
-                namespace.statesPanel.closeChip(name);
-                break;
+
             case 'states-clear':
                 namespace.statesPanel.clear(storeState, name);
                 break;
@@ -274,7 +216,7 @@
                 triggerCloneFilePicker(name);
                 break;
             case 'clone-play':
-                namespace.actions.playCloneVoice(speaker, isStateScoped(actionNode));
+                namespace.actions.playCloneVoice(speaker);
                 break;
             case 'clone-delete':
                 namespace.actions.deleteCloneVoice(speaker);
@@ -329,23 +271,6 @@
         namespace.saveController.scheduleSave();
     }
 
-    /* The same reference choice, written into the open state draft. */
-    function applyStateDraftReference(storeState, name, value) {
-        var draft = selectors.selectStateDraft(storeState, name);
-        if (!draft || !value || value === '__manual__') { return; }
-        var separator = value.indexOf(':');
-        var kind = value.slice(0, separator);
-        var id = value.slice(separator + 1);
-        var pool = kind === 'clone' ? selectors.selectCloneVoices(storeState) : selectors.selectDesignedVoices(storeState);
-        var row = pool.find(function (candidate) { return candidate.id === id; });
-        if (!row) { return; }
-        var entry = Object.assign({}, draft.entry, {
-            type: 'clone',
-            ref_audio: (kind === 'clone' ? 'clone_voices/' : 'designed_voices/') + row.filename,
-            ref_text: row.ref_text || draft.entry.ref_text || ''
-        });
-        state.dispatch({ type: 'state-draft/set', name: name, index: draft.index, entry: entry });
-    }
 
     /* ------------------------------------------------------------------ */
     /* toolbar                                                             */

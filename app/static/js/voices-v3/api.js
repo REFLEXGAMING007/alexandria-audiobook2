@@ -12,7 +12,11 @@
     'use strict';
 
     var PATHS = Object.freeze({
-        roster: '/api/voices',
+        /* `expand_states=1` makes a character with several settled states come back as
+     one row per state (MARO#teen, MARO#adult, MARO#elderly) instead of one row
+     per character. Opt-in because the legacy Voices tab reads the same endpoint
+     and must keep seeing one row per character. */
+    roster: '/api/voices?expand_states=1',
         snapshot: '/api/voice_config/snapshot',
         save: '/api/voice_config/save',
         seedUnseeded: '/api/voice_config/seed_unseeded',

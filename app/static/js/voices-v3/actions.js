@@ -213,10 +213,9 @@
     /* clone references                                                    */
     /* ------------------------------------------------------------------ */
 
-    /* `scoped` means the reference belongs to an open state draft rather than to
-     * the character. The upload itself is the same either way; only the write
-     * target differs, and a state draft is never autosaved. */
-    async function uploadCloneVoice(name, file, scoped) {
+    /* `name` is the roster row KEY ("MARO#adult" for a state row), so the reference
+     * lands on that state's own entry and is saved into versions[age_group]. */
+    async function uploadCloneVoice(name, file) {
         if (!file || !name) { return false; }
         try {
             var response = await namespace.api.uploadCloneVoice(file);
@@ -224,21 +223,14 @@
             var uploadedId = response && response.id;
             if (uploadedId) {
                 var storeState = state.getState();
-                var current = scoped
-                    ? Object.assign({}, selectors.selectStateDraft(storeState, name).entry)
-                    : Object.assign({}, selectors.workingOf(storeState, name));
+                var current = Object.assign({}, selectors.workingOf(storeState, name));
                 var row = selectors.selectCloneVoices(storeState).find(function (voice) { return voice.id === uploadedId; });
                 if (row) {
                     current.type = 'clone';
                     current.ref_audio = 'clone_voices/' + row.filename;
                     current.ref_text = row.ref_text || current.ref_text || '';
-                    if (scoped) {
-                        var draft = selectors.selectStateDraft(storeState, name);
-                        state.dispatch({ type: 'state-draft/set', name: name, index: draft.index, entry: current });
-                    } else {
-                        state.dispatch({ type: 'working/set', name: name, entry: current });
-                        namespace.saveController.scheduleSave();
-                    }
+                    state.dispatch({ type: 'working/set', name: name, entry: current });
+                    namespace.saveController.scheduleSave();
                 }
             }
             core.notify('Reference audio uploaded.', 'success');
@@ -251,14 +243,12 @@
         }
     }
 
-    async function playCloneVoice(name, scoped) {
+    async function playCloneVoice(name) {
         var storeState = state.getState();
-        var draft = scoped ? selectors.selectStateDraft(storeState, name) : null;
-        var current = draft ? (draft.entry || {}) : selectors.workingOf(storeState, name);
-        var path = current.ref_audio || (scoped ? '' : selectors.storedConfig(storeState, name).ref_audio) || '';
+        var current = selectors.workingOf(storeState, name);
+        var path = current.ref_audio || selectors.storedConfig(storeState, name).ref_audio || '';
         if (!path) {
-            core.notify('There is no reference audio for '
-                + (draft ? 'this state of ' : '') + name + '.', 'warning');
+            core.notify('There is no reference audio for ' + name + '.', 'warning');
             return false;
         }
         var namespace_ = path.indexOf('clone_voices/') === 0 ? 'clone_voices'

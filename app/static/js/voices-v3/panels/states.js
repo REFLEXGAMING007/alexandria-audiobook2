@@ -173,140 +173,8 @@
     }
 
     /* ------------------------------------------------------------------ */
-    /* state chips                                                         */
+    /* the manual voice-change panel                                        */
     /* ------------------------------------------------------------------ */
-
-    /* Opening a chip is deliberately two-stage: the chip itself renders from the
-     * roster projection, which already carries every settled state's traits, so
-     * the buttons appear on first paint with no request at all. The chunk index a
-     * state starts on is NOT in that projection - it only exists in the state
-     * timeline - so the timeline is fetched here, on first open, and then reused
-     * by the Voice changes panel and by every later chip. */
-    async function openChip(storeState, speaker, index) {
-        if (index === null || index < 0) { return false; }
-        var panel = selectors.selectStatePanel(storeState, speaker);
-        if (!panel.loaded && !panel.loading) {
-            await open(storeState, speaker);
-        }
-        // Re-read: `open` dispatches, so the panel that matters is the new one.
-        panel = selectors.selectStatePanel(namespace.state.getState(), speaker);
-        if (!panel.loaded) {
-            var failure = panel.error || 'The state timeline could not be loaded.';
-            core.notifyFailure('Could not open that state for ' + speaker, null,
-                failure + ' Use the Voice changes panel to retry.');
-            return false;
-        }
-
-        var chips = selectors.selectStateChips(state.getState(), speaker);
-        var chip = chips[index];
-        if (!chip) {
-            core.notify('That state no longer exists for ' + speaker + '. Reload Voices and try again.', 'warning');
-            return false;
-        }
-
-        // Pre-fill the draft from the saved version so an existing assignment is
-        // visible and editable rather than starting blank.
-        var entry = selectors.selectStateVersionEntry(state.getState(), speaker, index) || {};
-        namespace.state.dispatch({ type: 'state-edit/open', name: speaker, index: index, entry: entry });
-        return true;
-    }
-
-    function closeChip(speaker) {
-        namespace.state.dispatch({ type: 'state-edit/close', name: speaker });
-    }
-
-    /* Saving one state's voice is three writes: the version itself, then a
-     * version_timeline rebuilt across ALL of the character's states, so the saved
-     * timeline always describes the whole book rather than the last chip touched.
-     *
-     * The timeline is rebuilt from every state, not just this one: a timeline
-     * point is "from this chunk on, use this version", so a gap where state 1 has
-     * no version would silently leave state 1 running on the main voice from
-     * state 2's chunk onwards.
-     */
-    async function applyChip(storeState, speaker, index) {
-        if (index === null || index < 0) { return false; }
-        var current = namespace.state.getState();
-        var chips = selectors.selectStateChips(current, speaker);
-        var chip = chips[index];
-        if (!chip) {
-            core.notify('That state no longer exists for ' + speaker + '. Reload Voices and try again.', 'warning');
-            return false;
-        }
-
-        var fromIndex = selectors.selectStateFromIndex(current, speaker, index);
-        if (fromIndex === null) {
-            core.notify('That state has no chunk to start from yet, so it cannot be scheduled. '
-                + 'Render the book once in the Editor, then save it again.', 'warning', 8000);
-            return false;
-        }
-
-        var config = selectors.stateVersionEntry(current, speaker, index);
-        if (!Object.keys(config).length) {
-            core.notify('Choose a voice for this state before saving it.', 'warning');
-            return false;
-        }
-
-        namespace.state.dispatch({ type: 'states/set', name: speaker, saving: true, error: '', notice: '' });
-        try {
-            /* `VoiceVersionRequest` takes `{version_id, age_group, config}`. The
-             * voice fields must go inside `config`: sent flat they are dropped by
-             * the request model and the version ends up as a copy of whatever the
-             * character entry happens to be. */
-            await namespace.api.addVersion(speaker, {
-                version_id: chip.versionId,
-                age_group: chip.ageGroup,
-                config: config
-            });
-
-            /* Rebuild every located state's point. A state with no saved version
-             * falls back to `main`, which is the character's own voice - so
-             * unassigned states keep speaking as themselves instead of
-             * inheriting a later state's voice.
-             *
-             * The state's own point always names the version just written, even
-             * before the reload lands, so the timeline never references a
-             * version the server has not been told about. */
-            var after = namespace.state.getState();
-            var points = [];
-            for (var position = 0; position < chips.length; position += 1) {
-                var start = selectors.selectStateFromIndex(after, speaker, position);
-                if (start === null) { continue; }
-                if (position === index) {
-                    points.push({ from_index: start, version_id: chip.versionId });
-                    continue;
-                }
-                var saved = selectors.selectStateVersionEntry(after, speaker, position);
-                points.push({ from_index: start, version_id: saved ? chips[position].versionId : 'main' });
-            }
-
-            await namespace.api.saveVersionTimeline(speaker, points);
-            namespace.state.dispatch({
-                type: 'states/set',
-                name: speaker,
-                saving: false,
-                notice: 'Saved. Lines already rendered keep the voice they had.'
-            });
-            core.notify('Saved "' + chip.label + '" for ' + speaker
-                + ' from chunk ' + (fromIndex + 1)
-                + '. Lines already rendered keep the voice they had.', 'success', 8000);
-            // Close the chip so the card returns to character scope and the chip
-            // picks up its new "voice set, scheduled" marks.
-            closeChip(speaker);
-            await namespace.lifecycle.reloadVoices();
-            return true;
-        } catch (error) {
-            namespace.state.dispatch({
-                type: 'states/set',
-                name: speaker,
-                saving: false,
-                error: 'Could not save this state\'s voice: ' + namespace.api.messageOf(error, '')
-            });
-            core.notifyFailure('Could not save this state\'s voice for ' + speaker, error,
-                'Reload Voices and check the saved voice changes before saving again.');
-            return false;
-        }
-    }
 
     function currentSelections(name) {
         var target = container(name);
@@ -410,9 +278,6 @@
         open: open,
         apply: apply,
         clear: clear,
-        openChip: openChip,
-        applyChip: applyChip,
-        closeChip: closeChip,
         currentSelections: currentSelections,
         appliedDefault: appliedDefault
     };
