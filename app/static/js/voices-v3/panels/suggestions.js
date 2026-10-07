@@ -78,9 +78,14 @@
 
     async function suggest(state, names) {
         var scopeIsNew = selectors.selectScopeIsNew(state);
+        /* Characters, not rows: taking every row name here sent the same character once
+         * per settled state, and the request deduplicates by speaker anyway - so
+         * a three-state character burned three suggestions to get one answer. */
         var characters = names && names.length
             ? names
-            : (scopeIsNew ? selectors.selectScopeSummary(state).pending : selectors.selectRosterRows(state).map(function (row) { return row.name; }));
+            : (scopeIsNew
+                ? selectors.selectScopeSummary(state).pending
+                : selectors.selectCharacterNames(state));
 
         if (!characters.length) {
             core.notify('There are no characters to suggest voices for.', 'warning');

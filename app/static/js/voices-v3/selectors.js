@@ -353,11 +353,58 @@
 
     /* Scope: `pending` = no persona yet, `have` = a persona exists. Mirrors the
      * original `_voicesScopeState`. */
+    /* Every character in the roster, once, in roster order.
+     *
+     * A state row repeats its character's name, so anything addressed BY NAME -
+     * a cast-member dropdown, a bulk request, a suggestion list - must not be
+     * built from rows or it offers the same character once per settled state.
+     * The order of first appearance is kept so the list is stable. */
+    function selectCharacterNames(state) {
+        var seen = {};
+        var names = [];
+        selectRosterRows(state).forEach(function (row) {
+            var key = row.speaker || row.name;
+            if (!key || Object.prototype.hasOwnProperty.call(seen, key)) { return; }
+            seen[key] = true;
+            names.push(key);
+        });
+        return names;
+    }
+
     function selectScopeSummary(state) {
-        var rows = selectRosterRows(state);
-        var pending = rows.filter(function (row) { return row.personaPending; }).map(function (row) { return row.name; });
-        var have = rows.filter(function (row) { return !row.personaPending; }).map(function (row) { return row.name; });
-        return { pending: pending, have: have };
+        /* Count CHARACTERS, not rows.
+         *
+         * `persona_pending` is computed once per character in get_voice_rows
+         * (voices.py) and copied onto each of that character's state rows, so
+         * every row of a character agrees. Summing rows counted MARO three times
+         * and reported "regenerate 11" for a book of nine characters - while the
+         * backend's `new_only` filter is `not voice_is_set(voice_config.get(s))`
+         * over characters, so the number never matched what the run would do. The
+         * error grows with every multi-state character.
+         *
+         * A character with one row generated and two not cannot occur while the
+         * flag is character-level, so grouping by speaker is safe today. If it
+         * ever becomes per-state, this is the place that changes. */
+        var bySpeaker = {};
+        selectRosterRows(state).forEach(function (row) {
+            var key = row.speaker || row.name;
+            if (!key) { return; }
+            if (!Object.prototype.hasOwnProperty.call(bySpeaker, key)) {
+                bySpeaker[key] = { name: key, pending: row.personaPending };
+            } else {
+                /* A character counts as pending only if EVERY one of its rows is
+                 * pending, so a partially-assigned character is reported once as
+                 * having a voice rather than appearing in both lists. */
+                bySpeaker[key].pending = bySpeaker[key].pending && row.personaPending;
+            }
+        });
+        var characters = Object.keys(bySpeaker).map(function (key) { return bySpeaker[key]; });
+        return {
+            pending: characters.filter(function (c) { return c.pending; }).map(function (c) { return c.name; }),
+            have: characters.filter(function (c) { return !c.pending; }).map(function (c) { return c.name; }),
+            /* Retained for a caller that genuinely wants the row view. */
+            rowCount: selectRosterRows(state).length
+        };
     }
 
     function selectScopeIsNew(state) {
@@ -633,6 +680,7 @@
         selectVisibleRows: selectVisibleRows,
         selectReadySummary: selectReadySummary,
         selectScopeSummary: selectScopeSummary,
+    selectCharacterNames: selectCharacterNames,
         selectScopeIsNew: selectScopeIsNew,
         selectScopeOptions: selectScopeOptions,
         resolveScope: resolveScope,

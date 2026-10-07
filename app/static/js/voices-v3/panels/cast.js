@@ -263,8 +263,8 @@
                 + '<td><select class="form-select form-select-sm" data-voicesv3-action="cast-map-character"'
                 + ' data-voicesv3-index="' + index + '">'
                 + markup.option('', '(skip)', !character)
-                + selectors.selectRosterRows(state).map(function (row) {
-                    return markup.option(row.name, row.name, row.name === character);
+                + selectors.selectCharacterNames(state).map(function (name) {
+                    return markup.option(name, name, name === character);
                 }).join('')
                 + '</select></td>'
                 + '<td class="small text-muted">'

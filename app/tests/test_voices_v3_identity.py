@@ -676,6 +676,74 @@ console.log(JSON.stringify(plain(
         self.assertEqual("Aiden", got.get("voice"))
 
 
+class CharacterScopedCountsTests(_NodeTestCase):
+    """Anything addressed BY NAME must count characters, not rows.
+
+    `persona_pending` is computed once per character in get_voice_rows and
+    copied onto each of that character's state rows, so a multi-state character
+    contributed one identical flag per state. Summing rows made the scope
+    dropdown say "All characters (regenerate 11)" for a book of nine characters,
+    while the backend's `new_only` filter is over characters - so the count never
+    matched what the run would do, and the error grew with every state row.
+    """
+
+    def test_the_scope_total_is_a_character_count(self):
+        got = self.run_json("""
+const V=ns(),st=V.state.getState();
+const sum=V.selectors.selectScopeSummary(st);
+console.log(JSON.stringify(plain({
+  pending:sum.pending,have:sum.have,rowCount:sum.rowCount,
+  characters:V.selectors.selectCharacterNames(st)
+})));
+""")
+        # The fixture has 3 characters (MARO with three states, plus two plain).
+        self.assertEqual(3, len(got["characters"]),
+                         "selectCharacterNames must not repeat a character per state")
+        self.assertEqual(got["characters"], ["MARO", "THE FOREMAN", "NARRATOR"])
+        self.assertEqual(
+            len(got["pending"]) + len(got["have"]), len(got["characters"]),
+            f"the scope lists cover {len(got['pending']) + len(got['have'])} "
+            f"entries for {len(got['characters'])} characters, so MARO is counted "
+            f"more than once: pending={got['pending']} have={got['have']}")
+        self.assertNotIn("MARO", got["pending"],
+                         "MARO appears once per state; a character must appear once")
+        self.assertEqual(5, got["rowCount"],
+                         "the row view is kept, and this fixture has five rows")
+
+    def test_a_multi_state_character_is_counted_once(self):
+        """The exact overcount: three rows, one character."""
+        got = self.run_json("""
+const V=ns();
+const sum=V.selectors.selectScopeSummary(V.state.getState());
+console.log(JSON.stringify(plain({
+  maroPending:sum.pending.filter(n=>n==='MARO').length,
+  maroHave:sum.have.filter(n=>n==='MARO').length
+})));
+""")
+        self.assertEqual(1, got["maroPending"] + got["maroHave"],
+                         "MARO has three state rows and must be counted once")
+
+    def test_a_character_never_appears_in_both_lists(self):
+        got = self.run_json("""
+const V=ns();
+const sum=V.selectors.selectScopeSummary(V.state.getState());
+console.log(JSON.stringify(plain({pending:sum.pending,have:sum.have})));
+""")
+        both = set(got["pending"]) & set(got["have"])
+        self.assertEqual(set(), both,
+                         f"{sorted(both)} appear as both pending and assigned")
+
+    def test_character_names_preserve_roster_order(self):
+        got = self.run_json("""
+const V=ns();
+console.log(JSON.stringify(plain(
+  V.selectors.selectCharacterNames(V.state.getState()))));
+""")
+        self.assertEqual(["MARO", "THE FOREMAN", "NARRATOR"], got,
+                         "order must be stable so the cast dropdown does not "
+                         "reorder between renders")
+
+
 class UnassignedStateSaveTests(_NodeTestCase):
     """A state row with no saved version must not be invented on save.
 
@@ -729,6 +797,79 @@ console.log(JSON.stringify(plain({
                          "looks assigned with no voice")
         self.assertEqual("custom", got["baseType"],
                          "the character's own entry must keep its own type")
+
+
+class TraitBadgeLayoutTests(unittest.TestCase):
+    """The trait badge must not overflow its column onto the type radios.
+
+    Bootstrap's `.badge` sets `white-space: nowrap`, and the Voices V3 card caps
+    the identity column at `max-width: 22rem`. The badge text is a
+    model-inferred summary - "Script estimate: male . teen -> male . adult ->
+    male . elderly" for a character with three settled states - so it rendered on
+    one line far wider than the column and overlapped the type radios beside it.
+
+    Measured in the browser on the live roster: 433px of badge in a 155px column
+    for MARO, and still 213px for a plain character like THE BOY. Every card
+    overlapped; the multi-state ones were just the worst.
+
+    This is a stylesheet rule, so it is asserted against index.html rather than
+    at runtime. A browser geometry test would need a real layout engine, and the
+    rule that fixes it is the thing worth protecting.
+    """
+
+    INDEX = APP / "static" / "index.html"
+
+    def setUp(self):
+        self.css = self.INDEX.read_text(encoding="utf-8")
+
+    def test_the_v3_trait_badge_is_allowed_to_wrap(self):
+        self.assertIn("#voicesv3-tab .voice-card .card-title .badge", self.css,
+                      "the badge rule that stops the overflow is missing")
+        block = self._rule_for("#voicesv3-tab .voice-card .card-title .badge")
+        self.assertIn("white-space: normal", block,
+                      "Bootstrap's .badge is nowrap; the V3 override must unset it")
+        self.assertIn("overflow-wrap", block,
+                      "a long unbroken run still needs somewhere to break")
+
+    def test_the_rule_is_scoped_to_the_v3_tab(self):
+        """The legacy Voices tab must keep its own badge rendering."""
+        match = re.search(
+            r"([^{}]*?)\{", self.css[
+                self.css.index("#voicesv3-tab .voice-card .card-title .badge"):])
+        self.assertIsNotNone(match)
+        selector_text = match.group(1).strip()
+        self.assertEqual("#voicesv3-tab .voice-card .card-title .badge",
+                         selector_text,
+                         f"the badge rule's selector is {selector_text!r}; an "
+                         f"unscoped or comma-listed rule would restyle every card "
+                         f"on the legacy Voices tab, which this tab does not own")
+
+    def test_the_full_summary_is_still_available(self):
+        """Wrapping must not cost the detail - it moves to the title tooltip.
+
+        `markup.traitBadge` already writes the full summary into the badge's
+        title attribute, so wrapping the visible text loses nothing. Asserted
+        here because the fix's whole justification is that the text stays
+        reachable, and that is the easy thing to drop later.
+        """
+        badge = (V3_DIR / "widgets" / "markup.js").read_text(encoding="utf-8")
+        self.assertIn("title=\"'", badge,
+                      "the trait badge must carry a title attribute")
+        self.assertIn("Script estimate: ", badge,
+                      "the visible label is unchanged")
+
+    def _rule_for(self, selector):
+        """The declaration block for a CSS selector, or '' if absent."""
+        index = self.css.find(selector + " {")
+        if index == -1:
+            # allow newlines between selector and brace
+            index = self.css.find(selector)
+            if index == -1:
+                return ""
+            index = self.css.find("{", index)
+        start = self.css.find("{", index)
+        end = self.css.find("}", start)
+        return self.css[start:end + 1] if start != -1 and end != -1 else ""
 
 
 if __name__ == "__main__":

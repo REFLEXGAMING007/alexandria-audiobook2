@@ -805,6 +805,18 @@
         #voicesv3-tab .voice-card .row > .col-md-3 { max-width: 22rem; }
         #voicesv3-tab .voice-card .btn-group { flex-wrap: wrap; }
         #voicesv3-tab .voice-card .form-text { font-size: 0.78rem; }
+        /* Bootstrap's .badge is white-space: nowrap, so the trait badge ran
+           straight out of the narrow identity column and landed on top of the
+           type radios beside it. Measured: 433px of badge in a 155px column for
+           a character with three settled states, and still 213px for a plain
+           one - so every card overlapped, not only the multi-state ones. The
+           full text stays in the title attribute. */
+        #voicesv3-tab .voice-card .card-title .badge {
+            white-space: normal;
+            overflow-wrap: anywhere;
+            text-align: left;
+            vertical-align: middle;
+        }
         #voicesv3-tab .voice-states { border-left: 3px solid var(--bs-border-color, #dee2e6); padding-left: 0.6rem; }
         #voicesv3-tab .voice-state-row + .voice-state-row { border-top: 1px dashed var(--bs-border-color, #dee2e6); padding-top: 0.4rem; }
         #voicesv3-tab .ensemble-members { max-height: 16rem; overflow-y: auto; }
