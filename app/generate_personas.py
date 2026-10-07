@@ -715,16 +715,63 @@ def _fallback_compiled_persona(character_ref):
     return description, ref_text
 
 
-def _save_generated_preview(root, engine, voice_config, speaker, description, ref_text, book_id=None):
+def _build_generated_entry(voice_config, speaker, description, ref_text,
+                           ref_audio=None):
+    """The entry a successful generation produces, without touching the config.
+
+    Split out from `_save_generated_preview` so a per-state caller can write
+    `versions[age_group]` from the generated values instead of copying them back
+    out of `voice_config[speaker]`. That copy was the overwrite: the base entry
+    had already been rewritten by the time the version snapshot was taken, so
+    every state's persona landed on the character as well.
+
+    The per-character containers are dropped rather than carried: this entry is
+    both what the base write needs and what a version snapshot is cut from, and a
+    version holding its own `versions` would nest.
+    """
+    entry = copy.deepcopy(voice_config.get(speaker, {}))
+    for key in ("versions", "candidates", "active_version", "active_candidate"):
+        entry.pop(key, None)
+    entry.update({
+        "type": "clone",
+        "persona_status": "generated",
+        "ref_audio": ref_audio,
+        "ref_text": ref_text,
+        "description": description,
+        "character_style": description,
+        "seed": character_voice_seed(speaker),
+    })
+    return entry
+
+
+def _save_generated_preview(root, engine, voice_config, speaker, description, ref_text,
+                            book_id=None, age_group=None, return_entry=False):
+    """Synthesise a preview and store the persona for one speaker.
+
+    `age_group` makes this a PER-STATE write: the persona goes to
+    `versions[age_group]` and the character's own entry is left alone. The
+    original Voices tab calls this with no `age_group` and keeps writing the base
+    entry, which is what it always did.
+
+    Returns the generated entry when `return_entry` is set, so the caller can
+    write the version from the values actually generated rather than re-reading
+    the base entry.
+    """
     try:
         wav_path, _ = engine.generate_voice_design(description=description, sample_text=ref_text)
     except Exception as e:
         print(f"Error generating voice preview for {speaker}: {e}")
+        # A synthesis failure writes nothing to the version. Falling back to the
+        # base entry here would put a half-written state persona on the character
+        # and silently drop the state the user asked for.
+        if age_group:
+            print(f"Not writing versions[{age_group}] for {speaker}: no preview was synthesised.")
+            return (False, None) if return_entry else False
         voice_entry = voice_config.get(speaker, {})
         voice_entry.update({"type": "design", "description": description, "ref_text": ref_text,
                             "persona_status": "generated"})
         voice_config[speaker] = voice_entry
-        return False
+        return (False, voice_entry) if return_entry else False
 
     # Persona previews belong to a book, not to the permanent Designer manifest.
     # Unique generations also preserve references held by saved books/versions.
@@ -744,25 +791,33 @@ def _save_generated_preview(root, engine, voice_config, speaker, description, re
         _atomic_json_write({"book_id": book_id, "speaker": speaker,
                             "description": description, "ref_text": ref_text,
                             "preview": relative_path}, os.path.join(preview_dir, "meta.json"))
-        voice_entry = copy.deepcopy(voice_config.get(speaker, {}))
-        voice_entry.update({
-            "type": "clone",
-            "persona_status": "generated",
-            "ref_audio": relative_path,
-            "ref_text": ref_text,
-            "description": description,
-            "character_style": description,
-            "seed": character_voice_seed(speaker),
-        })
-        voice_config[speaker] = voice_entry
+        voice_entry = _build_generated_entry(voice_config, speaker, description,
+                                             ref_text, ref_audio=relative_path)
+        if age_group:
+            # Per-state: the character's own entry keeps whatever the user had.
+            # Leaving it alone is the whole point - the base is the character's
+            # voice across all states, and a single state's persona is not it.
+            current = voice_config.get(speaker)
+            if not isinstance(current, dict):
+                current = {}
+                voice_config[speaker] = current
+            snapshot = {k: v for k, v in voice_entry.items()
+                        if k not in {"versions", "candidates", "active_version",
+                                     "active_candidate"}}
+            snapshot["age_group"] = age_group
+            current.setdefault("versions", {})[age_group] = snapshot
+            print(f"Persona generated and preview saved for {speaker} "
+                  f"[{age_group}]: {dest_path}")
+        else:
+            voice_config[speaker] = voice_entry
+            print(f"Persona generated and preview saved for {speaker}: {dest_path}")
     except Exception as e:
         if preview_dir is not None:
             shutil.rmtree(preview_dir)
         print(f"Error saving voice preview for {speaker}: {e}")
-        return False
+        return (False, None) if return_entry else False
 
-    print(f"Persona generated and preview saved for {speaker}: {dest_path}")
-    return True
+    return (True, voice_entry) if return_entry else True
 
 
 def _parse_discovered_characters(parsed):
@@ -855,7 +910,7 @@ def _write_batch_character_refs(ref_dir, characters, selected_speakers, batch_nu
 
 def _compile_persona(client, model_name, engine, voice_config, root, ref_dir, speaker,
                      samples, system_prompt, advanced_prompt, context_length=None,
-                     llm_config=None, book_id=None, preview_saver=None):
+                     llm_config=None, book_id=None, preview_saver=None, age_group=None):
     """Compile one speaker's accumulated reference data into a final persona
     (description + ref_text) and generate its preview audio. A supplied
     preview_saver handles this call only; production uses its usual saver.
@@ -907,12 +962,19 @@ def _compile_persona(client, model_name, engine, voice_config, root, ref_dir, sp
 
     voice_entry = voice_config.get(speaker, {})
     voice_entry["persona_ref"] = os.path.relpath(_character_ref_path(ref_dir, speaker), root).replace('\\', '/')
+    # `persona_ref` points at the evidence file for this run and is recorded
+    # whether or not a preview is saved, so a failed per-state run still leaves
+    # the evidence behind. It is character-scoped provenance rather than part of
+    # the voice, so it goes on the entry in both cases - dropping it under
+    # --age-group would lose the only record of which lines the persona used.
     voice_config[speaker] = voice_entry
     save_preview = preview_saver if preview_saver is not None else _save_generated_preview
+    extra = {"age_group": age_group} if age_group else {}
     if book_id is None:
-        saved = save_preview(root, engine, voice_config, speaker, description, ref_text)
+        saved = save_preview(root, engine, voice_config, speaker, description, ref_text, **extra)
     else:
-        saved = save_preview(root, engine, voice_config, speaker, description, ref_text, book_id=book_id)
+        saved = save_preview(root, engine, voice_config, speaker, description, ref_text,
+                             book_id=book_id, **extra)
     return saved
 
 
@@ -925,7 +987,9 @@ def run_advanced_persona_generation(script, selected_speakers, samples, voice_co
             recovered = validate_persona_payload(voice_config[recovered_speaker])
             print(f"Using recovered persona for {recovered_speaker}; skipping discovery and compilation.")
             if not _save_generated_preview(root, engine, voice_config, recovered_speaker,
-                                           recovered["description"], recovered["ref_text"], book_id=book_id):
+                                           recovered["description"], recovered["ref_text"],
+                                           book_id=book_id,
+                                           age_group=(getattr(args, "age_group", "") or "").strip() or None):
                 failures.append(recovered_speaker)
         except Exception as error:
             print(f"Recovered persona failed for {recovered_speaker}: {error}")
@@ -964,7 +1028,8 @@ def run_advanced_persona_generation(script, selected_speakers, samples, voice_co
         try:
             if _compile_persona(client, model_name, engine, voice_config, root, ref_dir,
                                 speaker, samples, system_prompt, advanced_prompt, context_length,
-                                llm_config, book_id=book_id) is False:
+                                llm_config, book_id=book_id,
+                                age_group=(getattr(args, "age_group", "") or "").strip() or None) is False:
                 failures.append(speaker)
         except Exception as error:
             print(f"Unhandled error for {speaker}: {error}")
@@ -1268,15 +1333,10 @@ def main():
             llm_config=llm_cfg,
             book_id=book_snapshot["book_id"],
         )
-        if args.age_group.strip():
-            for speaker in unique_speakers:
-                current = voice_config.get(speaker)
-                if not isinstance(current, dict):
-                    continue
-                snapshot = {k: v for k, v in current.items()
-                            if k not in {"versions", "candidates", "active_version", "active_candidate"}}
-                snapshot["age_group"] = args.age_group.strip()
-                current.setdefault("versions", {})[args.age_group.strip()] = snapshot
+        # With --age-group, `_save_generated_preview` has already written
+        # versions[age_group] itself and left the base entry alone. The loop that
+        # used to be here re-copied the character's entry into the version, so
+        # every state overwrote both the version and the character.
         try:
             save_generated_voice_config(voice_config_path, voice_config,
                                         initial_voice_config, samples.keys(), final_alias_proposals, book_snapshot=book_snapshot)
@@ -1351,16 +1411,16 @@ def main():
             if not ref_text:
                 ref_text = pick_ref_text(lines)
 
-            # Generate and save voice preview
-            if not _save_generated_preview(data_dir, engine, voice_config, speaker, description, ref_text,
-                                           book_id=book_snapshot["book_id"]):
+            # Generate and save voice preview. With --age-group this writes
+            # versions[age_group] and leaves the character's own entry alone; the
+            # version snapshot used to be taken from that entry afterwards, which
+            # is how every state's persona ended up on the character as well.
+            saved = _save_generated_preview(data_dir, engine, voice_config, speaker,
+                                            description, ref_text,
+                                            book_id=book_snapshot["book_id"],
+                                            age_group=args.age_group.strip() or None)
+            if not saved:
                 failures.append(speaker)
-            if args.age_group.strip() and isinstance(voice_config.get(speaker), dict):
-                current = voice_config[speaker]
-                snapshot = {k: v for k, v in current.items()
-                            if k not in {"versions", "candidates", "active_version", "active_candidate"}}
-                snapshot["age_group"] = args.age_group.strip()
-                current.setdefault("versions", {})[args.age_group.strip()] = snapshot
 
         except Exception as e:
             print(f"Unhandled error for {speaker}: {e}")
