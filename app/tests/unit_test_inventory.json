@@ -1518,11 +1518,16 @@
   ],
   "test_chunk_refresh_js": [
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_actual_batch_poll_fetches_and_renders_once_without_second_timer",
+    "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_batch_completion_uses_starting_book_and_row_uids",
+    "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_cancel_reconciles_optimistic_rows_without_forcing_redraw_or_losing_controls",
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_compact_deltas_keep_existing_rows_and_forced_refresh_gets_full_snapshot",
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_duplicate_delta_ids_refuse_before_replacing_cached_rows_and_recover_full",
+    "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_expanded_completion_updates_generated_action_container_without_replacing_pause_label",
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_failed_refresh_keeps_rows_and_shows_persistent_retry_until_recovery",
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_forced_redraw_retains_only_same_chunk_and_audio",
+    "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_full_snapshot_preserves_uid_owned_drafts_focus_and_expansion",
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_full_snapshot_redraws_same_ids_and_status_when_text_changes",
+    "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_managed_refresh_does_not_paint_prior_book_response_while_new_read_waits",
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_overlapping_reads_are_serialized_and_forced_freshness_is_not_lost",
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_reused_id_with_changed_uid_refuses_delta_and_preserves_old_identity",
     "tests.test_chunk_refresh_js.ChunkRefreshJsTests.test_same_length_replacements_reorders_and_playback_restore_correct_rows",
@@ -1554,6 +1559,9 @@
     "tests.test_clone_import_lifecycle_js.CloneImportLifecycleJsTests.test_old_success_does_not_close_new_modal_and_success_releases_submit_handler",
     "tests.test_clone_import_lifecycle_js.CloneImportLifecycleJsTests.test_pending_import_cannot_be_enabled_by_edits_or_duplicate_handler_calls",
     "tests.test_clone_import_lifecycle_js.CloneImportLifecycleJsTests.test_unmet_requirements_and_old_completion_do_not_write_or_change_new_status"
+  ],
+  "test_clone_playback_js": [
+    "tests.test_clone_playback_js.ClonePlaybackTests.test_native_play_rejection_and_throw_are_reported_without_unhandled_promises"
   ],
   "test_closed_set_harness": [
     "tests.test_closed_set_harness.ClosedSetHarnessTests.test_actual_harness_starts_scores_all_arms_and_writes_verified_rows"
@@ -2189,10 +2197,12 @@
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_preview_reset_editor_aba_and_out_of_order_ownership",
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_preview_success_requires_explicit_save_in_new_and_edit_modes",
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_save_pending_duplicate_and_newer_editor_work_are_preserved",
+    "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_save_requires_matching_preview_synthesis_inputs",
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_saved_playback_stops_prior_audio_and_only_current_failure_notifies",
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_saved_voice_lookup_is_discarded_after_new_open_reset_or_preview_editor",
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_saved_voice_open_clears_previous_preview_status_before_lookup",
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_saved_voice_open_hides_old_preview_before_lookup_completes",
+    "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_saved_voice_preview_retains_original_metadata_ownership",
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_successful_save_restores_create_label_and_failed_save_retains_edit_state",
     "tests.test_designer_response_identity_js.DesignerResponseIdentityJsTests.test_unsaved_switch_cancel_duplicate_and_intervening_edits_are_preserved"
   ],
@@ -2432,6 +2442,7 @@
   ],
   "test_editor_poll_delta": [
     "tests.test_editor_poll_delta.EditorPollDeltaTests.test_book_content_uid_deletion_and_eviction_force_full_resynchronization",
+    "tests.test_editor_poll_delta.EditorPollDeltaTests.test_invalid_persisted_ids_are_consistently_refused_without_losing_progress_or_audio",
     "tests.test_editor_poll_delta.EditorPollDeltaTests.test_native_journal_changes_invalidate_revision_without_snapshot_rewrite",
     "tests.test_editor_poll_delta.EditorPollDeltaTests.test_unchanged_poll_and_one_changed_row_do_not_transfer_book_text"
   ],
@@ -4524,6 +4535,7 @@
     "tests.test_managed_server_chain.ManagedServerChainTests.test_signals_stop_and_reap_healthy_child_with_signal_status"
   ],
   "test_manual_activity_js": [
+    "tests.test_manual_activity_js.ManualActivityTests.test_paused_task_hides_model_wait_and_eta_until_resumed",
     "tests.test_manual_activity_js.ManualActivityTests.test_pending_reply_is_announced_without_model_wait_or_running_eta"
   ],
   "test_manual_alias_validation": [
@@ -7430,6 +7442,11 @@
     "tests.test_text_diff_large_books.LargeBookDiffTests.test_empty_and_boundary_edits_keep_context_and_entry_ownership",
     "tests.test_text_diff_large_books.LargeBookDiffTests.test_repeated_words_with_multiple_distant_edits_are_precise"
   ],
+  "test_text_diff_reply_js": [
+    "tests.test_text_diff_reply_js.TextDiffReplyTests.test_book_edits_close_and_direct_merge_comparison_invalidate_pending_reply",
+    "tests.test_text_diff_reply_js.TextDiffReplyTests.test_current_failure_and_malformed_reply_remain_visible_errors",
+    "tests.test_text_diff_reply_js.TextDiffReplyTests.test_older_reply_or_error_cannot_replace_newer_comparison"
+  ],
   "test_third_party_findings": [
     "tests.test_third_party_findings.TestBlendSpec.test_capacity_counts_asymmetric_both_ways",
     "tests.test_third_party_findings.TestBlendSpec.test_capacity_counts_even_split_once",
@@ -8464,7 +8481,8 @@
     "tests.test_voice_feature_benchmark.VoiceFeatureBenchmarkTests.test_torch_features_match_librosa_on_voiced_and_noisy_audio"
   ],
   "test_voice_focus_restore_js": [
-    "tests.test_voice_focus_restore_js.VoiceFocusRestoreJsTests.test_native_control_identity_and_focus_ownership"
+    "tests.test_voice_focus_restore_js.VoiceFocusRestoreJsTests.test_native_control_identity_and_focus_ownership",
+    "tests.test_voice_focus_restore_js.VoiceFocusRestoreJsTests.test_suggestion_reorder_preserves_style_focus_and_selection"
   ],
   "test_voice_library_transactions": [
     "tests.test_voice_library_transactions.VoiceLibraryTransactionTests.test_bulk_keeps_library_kernel_lock_through_each_config_publication",
