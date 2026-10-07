@@ -981,6 +981,9 @@
     "tests.test_benchmark_runner.PersonaEmptyFixtureTests.test_real_case_scoring_preserves_positive_and_missing_persona_failure",
     "tests.test_benchmark_runner.PersonaEmptyFixtureTests.test_runner_rejects_hash_valid_empty_or_malformed_speakers_before_work",
     "tests.test_benchmark_runner.RemoteProfilingHashOutputTests.test_remote_hash_uses_last_nonempty_line_after_ssh_banner",
+    "tests.test_benchmark_runner.RemoteTrainingCleanupTests.test_actual_staging_files_removed_after_success_transfer_worker_timeout_and_cancel",
+    "tests.test_benchmark_runner.RemoteTrainingCleanupTests.test_cleanup_errors_do_not_replace_primary_failure_and_are_reported",
+    "tests.test_benchmark_runner.RemoteTrainingCleanupTests.test_local_training_and_unvalidated_remote_paths_are_never_deleted",
     "tests.test_benchmark_runner.TTSBenchmarkCancellationTests.test_http_cancel_during_worker_preserves_measured_cases_and_resume"
   ],
   "test_benchmark_sdk_cancel": [
