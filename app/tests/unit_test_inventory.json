@@ -4732,6 +4732,8 @@
   "test_normalize_for_speech": [
     "tests.test_normalize_for_speech.SpeechControlAndRiskTests.test_dotted_numbers_and_versions_are_not_urls_but_real_url_forms_remain_risks",
     "tests.test_normalize_for_speech.SpeechControlAndRiskTests.test_nonwhitespace_control_characters_never_reach_shared_tts_text",
+    "tests.test_normalize_for_speech.SpeechEvidenceRegressionTests.test_copyright_symbol_is_redundant_on_either_side_without_deleting_authored_words",
+    "tests.test_normalize_for_speech.SpeechEvidenceRegressionTests.test_inline_emphasis_is_not_list_evidence_but_bullets_and_tables_are",
     "tests.test_normalize_for_speech.SpeechFormattingEvidenceTests.test_each_formatting_change_has_specific_evidence_and_second_pass_is_clean",
     "tests.test_normalize_for_speech.TestIdempotence.test_applying_twice_changes_nothing",
     "tests.test_normalize_for_speech.TestLeavesProseAlone.test_authored_repetition_reaches_the_shared_tts_normalizer_intact",
@@ -5018,6 +5020,7 @@
   ],
   "test_persona_batch": [
     "tests.test_persona_batch.PersonaBatchTests.test_advanced_alias_check_publishes_requested_alias_without_compile",
+    "tests.test_persona_batch.PersonaBatchTests.test_advanced_fallback_honors_context_lines_and_existing_maximum",
     "tests.test_persona_batch.PersonaBatchTests.test_advanced_recovery_renders_saved_persona_without_discovery_or_compile",
     "tests.test_persona_batch.PersonaBatchTests.test_advanced_slices_are_produced_only_as_discovery_consumes_them",
     "tests.test_persona_batch.PersonaBatchTests.test_malicious_legacy_manifest_is_not_consulted_or_modified",
@@ -6605,6 +6608,8 @@
     "tests.test_script_dispatch_responsiveness.ScriptDispatchResponsivenessTests.test_single_and_batch_reject_same_unattested_narrator_without_state_mutation"
   ],
   "test_script_preflight": [
+    "tests.test_script_preflight.MixedSourceCyrillicRepairTests.test_source_backed_cyrillic_survives_mixed_prose_but_ocr_and_introductions_stay_guarded",
+    "tests.test_script_preflight.MixedSourceRepairRouteTests.test_native_preview_apply_preserves_mixed_source_word_and_refuses_introduced_word",
     "tests.test_script_preflight.NearDuplicateNormalizationTests.test_case_and_punctuation_variants_need_two_source_occurrences",
     "tests.test_script_preflight.NearDuplicateNormalizationTests.test_supported_distinct_near_lines_and_short_echoes_remain_unflagged",
     "tests.test_script_preflight.ScriptPreflightTests.test_apply_requires_current_preview_and_creates_backup",
@@ -7123,6 +7128,7 @@
     "tests.test_stage4_checkpoint_runner.Stage4CheckpointRunnerTest.test_validator_recomputes_summary",
     "tests.test_stage4_checkpoint_runner.Stage4CheckpointRunnerTest.test_validator_rejects_duplicate_matrix_cell",
     "tests.test_stage4_checkpoint_runner.Stage4CheckpointRunnerTest.test_validator_requires_error_breakdown_identity",
+    "tests.test_stage4_checkpoint_runner.Stage4CheckpointRunnerTest.test_windows_cross_drive_wav_is_wrapped_as_artifact_validation_error",
     "tests.test_stage4_checkpoint_runner.Stage4PilotAdmissionTests.test_actual_main_rejects_foreign_pilot_arguments_before_any_dispatch"
   ],
   "test_stage4_parallel_wavs": [
@@ -7137,6 +7143,7 @@
     "tests.test_stage4_checkpoint_runner.Stage4CheckpointRunnerTest.test_validator_recomputes_summary",
     "tests.test_stage4_checkpoint_runner.Stage4CheckpointRunnerTest.test_validator_rejects_duplicate_matrix_cell",
     "tests.test_stage4_checkpoint_runner.Stage4CheckpointRunnerTest.test_validator_requires_error_breakdown_identity",
+    "tests.test_stage4_checkpoint_runner.Stage4CheckpointRunnerTest.test_windows_cross_drive_wav_is_wrapped_as_artifact_validation_error",
     "tests.test_stage4_parallel_wavs.Stage4ParallelWavTests.test_failure_selection_is_by_row_order_and_all_readers_are_joined",
     "tests.test_stage4_parallel_wavs.Stage4ParallelWavTests.test_four_decoders_overlap_without_changing_audio_or_artifact",
     "tests.test_stage4_parallel_wavs.Stage4ParallelWavTests.test_last_block_truncation_rejected_with_original_row_number"
