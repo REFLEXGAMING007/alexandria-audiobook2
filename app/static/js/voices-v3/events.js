@@ -23,6 +23,42 @@
         return node ? (node.getAttribute('data-voicesv3-name') || node.closest('[data-voice]')?.getAttribute('data-voice')) : null;
     }
 
+    /* ------------------------------------------------------------------ */
+    /* the two identities a name can have                                   */
+    /* ------------------------------------------------------------------ */
+    /* A character has TWO names in this tab, and they are different strings:
+     *
+     *   row key   "MARO#adult"   one settled state. Unique per row, and the
+     *                            key the store, the DOM and the save map use.
+     *                            For a character with no state split the row key
+     *                            IS the character name.
+     *   speaker   "MARO"         the character. What every speaker-scoped API
+     *                            call must be given.
+     *
+     * Choosing wrong is SILENT. Both are plain strings, and every mistake lands
+     * somewhere plausible rather than failing: handed the speaker, a row-local
+     * function read the character's base entry instead of the row's own, so a
+     * state row's reference audio was invisible to its own play button, and an
+     * upload was written to the base instead of versions[age_group]. Handed a
+     * row key, an API call 404s with "Speaker is not present in the active
+     * script".
+     *
+     * So there are exactly two ways to obtain a name here, one per identity, and
+     * both are spelled out at every call site rather than resolved once into a
+     * local that any case can pick up. `tests/test_voices_v3_identity.py`
+     * asserts that every roster call site uses one of these two and nothing else,
+     * with the identity each action requires declared as its oracle. */
+
+    /* The roster row key for the row this control belongs to. */
+    function rowKeyFor(node) {
+        return nameOf(node);
+    }
+
+    /* The character for the row this control belongs to. */
+    function speakerFor(storeState, node) {
+        return selectors.speakerOf(storeState, nameOf(node));
+    }
+
     function actionOf(node) {
         return node ? node.getAttribute('data-voicesv3-action') : null;
     }
@@ -94,12 +130,12 @@
         // through the action table.
         if (node.classList && node.classList.contains('clone-voice-file-input')) {
             var file = node.files && node.files[0];
-            /* `name`, not `speakerOf(...)`: the upload is a ROW-LOCAL write, and
-             * uploadCloneVoice persists under versions[age_group] for a state row.
-             * Collapsing to the character put the file on the base entry instead.
-             * This also read `storeState` before it was assigned - the var was
-             * hoisted, so it was undefined here and speakerOf got no roster. */
-            if (file) { namespace.actions.uploadCloneVoice(name, file); }
+            /* ROW KEY: the upload is a row-local write, and uploadCloneVoice
+             * persists under versions[age_group] for a state row. Collapsing to the
+             * character put the file on the base entry instead. This also read
+             * `storeState` before it was assigned - the var was hoisted, so it was
+             * undefined and speakerOf got no roster at all. */
+            if (file) { namespace.actions.uploadCloneVoice(rowKeyFor(node), file); }
             // Reset so re-picking the same file fires another change event.
             node.value = '';
             return;
@@ -168,89 +204,85 @@ function onRosterClick(event) {
         if (!actionNode) { return; }
         var action = actionOf(actionNode);
         var storeState = state.getState();
-        var name = actionNode.getAttribute('data-voicesv3-name');
 
-        /* `name` here is the row key: "MARO" for a plain row, "MARO#adult" for one
-         * settled state. Store writes use the key; every speaker-scoped API call
-         * must use the CHARACTER, or it addresses a speaker that does not exist.
-         * Resolving it once here keeps the nine call sites below from each having
-         * to remember. */
-        var speaker = selectors.speakerOf(storeState, name);
-
+        /* No `name` and no `speaker` local. Resolving both once and leaving them
+         * within reach is what let three cases take the wrong one; every case now
+         * asks for the identity it needs by name. */
         switch (action) {
             case 'style-point-remove':
                 event.preventDefault();
-                namespace.actions.removeStylePoint(speaker, indexOf(actionNode));
+                namespace.actions.removeStylePoint(speakerFor(storeState, actionNode), indexOf(actionNode));
                 break;
             case 'persona-regenerate':
-                /* `speaker`, not `name`: the request filter is the CHARACTER, and
-                 * _require_script_speaker rejects anything not in the script - so a
-                 * row key here 404s with "Speaker is not present in the active
+                /* SPEAKER, not the row key: the request filter is the CHARACTER,
+                 * and _require_script_speaker rejects anything not in the script -
+                 * a row key here 404s with "Speaker is not present in the active
                  * script". A state row additionally carries the age band and the
                  * script-entry range it covers; a plain row carries neither. */
-                namespace.personasPanel.regenerateOne(speaker, {
+                namespace.personasPanel.regenerateOne(speakerFor(storeState, actionNode), {
                     ageGroup: actionNode.getAttribute('data-voicesv3-age'),
                     entryRange: entryRangeOf(actionNode)
                 });
                 break;
             case 'persona-audit-edit':
-                namespace.actions.editPersonaVoiceAudit(speaker);
+                namespace.actions.editPersonaVoiceAudit(speakerFor(storeState, actionNode));
                 break;
             case 'approval':
-                namespace.actions.setApproval(speaker, actionNode.getAttribute('data-voicesv3-field'), valueOf(actionNode));
+                namespace.actions.setApproval(speakerFor(storeState, actionNode), actionNode.getAttribute('data-voicesv3-field'), valueOf(actionNode));
                 break;
             case 'version-select':
-                namespace.actions.selectVersion(speaker, actionNode.value);
+                namespace.actions.selectVersion(speakerFor(storeState, actionNode), actionNode.value);
                 break;
             case 'version-add':
-                namespace.actions.addVersion(speaker);
+                namespace.actions.addVersion(speakerFor(storeState, actionNode));
                 break;
             case 'version-generate-age':
-                namespace.actions.generateAgeVersion(speaker, actionNode.getAttribute('data-voicesv3-age'));
+                namespace.actions.generateAgeVersion(speakerFor(storeState, actionNode), actionNode.getAttribute('data-voicesv3-age'));
                 break;
             case 'states-open':
-                namespace.statesPanel.open(storeState, name);
+                namespace.statesPanel.open(storeState, rowKeyFor(actionNode));
                 break;
             case 'states-apply':
-                namespace.statesPanel.apply(storeState, name);
+                namespace.statesPanel.apply(storeState, rowKeyFor(actionNode));
                 break;
 
             case 'states-clear':
-                namespace.statesPanel.clear(storeState, name);
+                namespace.statesPanel.clear(storeState, rowKeyFor(actionNode));
                 break;
             case 'suggest-more':
-                namespace.suggestionsPanel.suggestMore(storeState, name);
+                namespace.suggestionsPanel.suggestMore(storeState, rowKeyFor(actionNode));
                 break;
             case 'suggestion-apply':
-                namespace.suggestionsPanel.applyOne(speaker, actionNode.getAttribute('data-voicesv3-id'));
+                namespace.suggestionsPanel.applyOne(speakerFor(storeState, actionNode), actionNode.getAttribute('data-voicesv3-id'));
                 break;
             case 'candidate-select':
-                namespace.actions.selectCandidate(speaker, actionNode.getAttribute('data-voicesv3-id'));
+                namespace.actions.selectCandidate(speakerFor(storeState, actionNode), actionNode.getAttribute('data-voicesv3-id'));
                 break;
             case 'candidate-delete':
-                namespace.actions.deleteCandidate(speaker, actionNode.getAttribute('data-voicesv3-id'));
+                namespace.actions.deleteCandidate(speakerFor(storeState, actionNode), actionNode.getAttribute('data-voicesv3-id'));
                 break;
             case 'candidate-favorite':
-                namespace.actions.favoriteCandidate(speaker, actionNode.getAttribute('data-voicesv3-id'), valueOf(actionNode) === 'true');
+                namespace.actions.favoriteCandidate(speakerFor(storeState, actionNode), actionNode.getAttribute('data-voicesv3-id'), valueOf(actionNode) === 'true');
                 break;
             case 'clone-upload':
-                triggerCloneFilePicker(name);
+                triggerCloneFilePicker(rowKeyFor(actionNode));
                 break;
-            /* `name`, not `speaker`: these read and write ROW-LOCAL state via
+            /* ROW KEY, not the speaker: these read and write ROW-LOCAL state via
              * selectors.workingOf/storedConfig, which are keyed by the roster row.
-             * Handing them the character collapsed "MARO#adult" to "MARO", so a
-             * state row's own reference audio was invisible to its play button -
-             * it reported "no reference audio for MARO" while the row's field was
-             * visibly full. Same latent bug would have let one state row's delete
-             * target another row's reference. */
+             * Handed the character they collapsed "MARO#adult" to "MARO", so a
+             * state row's own reference audio was invisible to its own play button
+             * - it reported "no reference audio for MARO" while the row's field was
+             * visibly full. The same mistake would have let one state row's delete
+             * target another row's reference, or put an upload on the base entry
+             * instead of versions[age_group]. */
             case 'clone-play':
-                namespace.actions.playCloneVoice(name);
+                namespace.actions.playCloneVoice(rowKeyFor(actionNode));
                 break;
             case 'clone-delete':
-                namespace.actions.deleteCloneVoice(name);
+                namespace.actions.deleteCloneVoice(rowKeyFor(actionNode));
                 break;
             case 'design-open':
-                namespace.actions.openVoiceDesigner(name, actionNode);
+                namespace.actions.openVoiceDesigner(rowKeyFor(actionNode), actionNode);
                 break;
             case 'seed-repair':
                 namespace.actions.applyStableVoiceSeeds();

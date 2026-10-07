@@ -103,11 +103,24 @@
         if (type === 'ensemble') {
             return { type: 'ensemble', members: arrayOf(working.members).slice(), seed: '-1' };
         }
+        /* `description` is the persona text generate_personas.py writes, and
+         * `character_style` mirrors it for the Voice Design path. Both are in
+         * FORM_OWNED_KEYS, so `preservedMetadata` strips them from the stored
+         * entry and every type branch must re-emit the ones that apply to it -
+         * otherwise a save from this tab silently deletes the persona that was
+         * just generated. `design` already carries both; `custom` and `clone`
+         * did not, and a persona voice is stored as `clone`. */
+        var persona = {
+            description: text(working.description),
+            character_style: text(working.character_style)
+        };
         if (type === 'custom') {
-            return { type: 'custom', voice: text(working.voice), character_style: text(working.character_style), seed: '-1' };
+            return { type: 'custom', voice: text(working.voice),
+                character_style: persona.character_style, description: persona.description, seed: '-1' };
         }
         if (type === 'clone') {
-            return { type: 'clone', ref_text: text(working.ref_text), ref_audio: text(working.ref_audio), seed: '-1' };
+            return { type: 'clone', ref_text: text(working.ref_text), ref_audio: text(working.ref_audio),
+                description: persona.description, character_style: persona.character_style, seed: '-1' };
         }
         if (type === 'builtin_lora') {
             var builtinId = text(working.adapter_id);
@@ -165,6 +178,22 @@
         return merged;
     }
 
+    /* Does this entry represent an actual voice, or is it an empty row?
+     *
+     * Mirrors `voice_is_set` in tts.py, so the roster agrees with the server
+     * about who is assigned. Any non-custom type counts: a LoRA adapter id or a
+     * reference audio is a voice whatever else is missing. A custom entry only
+     * counts once it names a voice or carries a persona, because the bare
+     * `{type:'custom', voice:''}` the form produces for an untouched row is not
+     * one. */
+    function isAssignedEntry(entry) {
+        if (!entry || typeof entry !== 'object') { return false; }
+        var type = text(entry.type) || 'custom';
+        if (type !== 'custom') { return true; }
+        return Boolean(text(entry.voice) || text(entry.description)
+            || text(entry.ref_audio) || text(entry.character_style));
+    }
+
     /* The save map, keyed by CHARACTER, not by row.
      *
      * State rows do not become top-level entries. Their fields are written into
@@ -179,7 +208,14 @@
      * therefore REPLACES the whole versions dict rather than merging into it, so
      * a state save that emitted only the edited version would silently destroy
      * its siblings. Every version is therefore rebuilt here: the stored ones,
-     * with this row's fields layered over its own band. */
+     * with this row's fields layered over its own band.
+     *
+     * A band with no voice contributes NOTHING. An unassigned state row is
+     * rendered empty rather than falling back to the character's base config
+     * (which is usually the `Aiden` placeholder), so emitting
+     * `{type:'custom', voice:'', seed:'-1'}` for it would put a fabricated
+     * version on disk: `has_version` would flip to true in the projection and
+     * the row would then render as assigned with no voice at all. */
     function buildVoiceDocument(state) {
         var roster = rosterOf(state);
         var document_ = {};
@@ -208,7 +244,15 @@
                     versions[speaker][versionId] = existing[versionId];
                 });
             }
-            versions[speaker][band] = buildEntry(state, key);
+            var entry = buildEntry(state, key);
+            if (isAssignedEntry(entry)) {
+                versions[speaker][band] = entry;
+            } else {
+                /* No voice on this band. Dropping it also covers the user
+                 * deliberately clearing one that existed, rather than leaving a
+                 * version that claims a voice it does not have. */
+                delete versions[speaker][band];
+            }
         });
 
         Object.keys(versions).forEach(function (speaker) {
@@ -577,6 +621,7 @@
         rowOf: rowOf,
         speakerOf: speakerOf,
         isStateRow: isStateRow,
+    isAssignedEntry: isAssignedEntry,
         stateAgeGroup: stateAgeGroup,
         loraById: loraById,
         buildTypeFields: buildTypeFields,
