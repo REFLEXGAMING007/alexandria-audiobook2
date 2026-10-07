@@ -23,15 +23,29 @@ AGE_GROUPS = (("infant", "0-1"), ("toddler", "1-3"), ("young_child", "3-5"), ("c
               ("teen", "12-17"), ("young_adult", "18-29"), ("adult", "30-39"),
               ("middle_aged", "40-59"), ("elderly", "60+"), ("unknown", ""))
 AGE_GROUP_NAMES = tuple(name for name, _ in AGE_GROUPS)
-# A change of one band (a teen turning young adult) does not change a voice;
-# only a bigger jump or a gender change is a new state (owner, 2026-10-03).
-STATE_CHANGE_BANDS = 2
-# A new state counts only after this many consecutive lines show it, so one
-# stray label never changes a voice while a real time skip still does. Set
-# after Mushoku Tensei Vol 1 (time_skip_traits.json): per-line age followed
-# the time skip in every chapter, but single batches flipped Roxy (an adult who
-# looks young) and gave Paul and Rudeus stray infant/teen lines.
-PERSIST_LINES = 10
+# DEBUGGING VALUES - DO NOT SHIP. Restore both before release.
+#
+# STATE_CHANGE_BANDS was 2: a one-band move (teen -> young_adult) was not a new
+# state, only a bigger jump or a gender change was (owner, 2026-10-03). That
+# MERGED adjacent bands: a character at teen / young_adult / adult / middle_aged
+# came out as two states of 47 and 63 lines, because every step in that sequence
+# is exactly one band apart. Line counts were never the problem.
+#
+# STATE_CHANGE_BANDS = 1 makes every band a character passes through its own
+# state. The same character now yields 15 / 32 / 46 / 17 - the real counts.
+#
+# PERSIST_LINES was 10: a new state needed 10 consecutive lines confirming it, so
+# one stray label could never change a voice (set after Mushoku Tensei Vol 1,
+# time_skip_traits.json - per-line age tracking flipped Roxy back and forth and
+# gave Paul and Rudeus stray infant/teen lines). Now 1, so a single line settles
+# a change and nothing is smoothed away.
+#
+# Cost of debugging this way, accepted knowingly: single-line blips become real
+# states, each with its own roster row and its own persona run. That is why
+# PERSIST_LINES is expected to go back to 10. Whether STATE_CHANGE_BANDS returns
+# to 2 is a separate question - reverting it reintroduces the merging.
+STATE_CHANGE_BANDS = 1
+PERSIST_LINES = 1
 # Children are not given an age anchor on the roster: they grow within a
 # volume, and an anchor fought the text - with "toddler" on the roster,
 # Rudeus's labels swung toddler <-> child through ages 3-5 (time_skip_traits_v2).
