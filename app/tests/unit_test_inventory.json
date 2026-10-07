@@ -221,7 +221,12 @@
     "tests.test_alignment_regressions.AlignmentCliRegressionTests.test_skipped_entry_is_prompted_again_on_resume",
     "tests.test_alignment_regressions.AlignmentCliRegressionTests.test_targeted_reset_recovers_from_corrupt_checkpoint",
     "tests.test_alignment_regressions.AlignmentCliRegressionTests.test_targeted_reset_refuses_mismatched_checkpoint_before_output_write",
-    "tests.test_alignment_regressions.AlignmentCliRegressionTests.test_targeted_reset_uses_nonblank_entry_indices"
+    "tests.test_alignment_regressions.AlignmentCliRegressionTests.test_targeted_reset_uses_nonblank_entry_indices",
+    "tests.test_alignment_regressions.CheckpointLocaleTests.test_checkpoint_reconstructs_exact_utf8_edits_under_non_utf8_default_locale",
+    "tests.test_alignment_regressions.SkippedEntryCursorTests.test_real_skip_resume_retains_exact_entry_text_and_source_position",
+    "tests.test_alignment_regressions.SourceDiacriticCleanupTests.test_abbreviation_initials_stay_separate_and_detached_endings_still_rejoin",
+    "tests.test_alignment_regressions.SpokenYearAlignmentTests.test_conventional_cardinals_keep_their_existing_value",
+    "tests.test_alignment_regressions.SpokenYearAlignmentTests.test_years_match_digits_and_preserve_both_source_boundaries"
   ],
   "test_analyze_generation_attempts": [
     "tests.test_analyze_generation_attempts.AttemptCountDistributionTests.test_splits_accepted_and_failed_chunks",
@@ -691,17 +696,20 @@
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_audio_directory_is_not_processed",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_batch_main_holds_gpu_lease_through_run",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_batch_summary_writes_a_complete_final_receipt",
+    "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_changed_text_during_worker_cannot_publish_completion_receipt",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_failed_rerun_invalidates_previous_completion_marker",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_folder_discovery_ignores_audio_named_directory",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_fuzzy_source_tie_requires_explicit_choice",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_invalid_numeric_arguments_stop_before_processing",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_invalid_zip_is_reprocessed_but_complete_zip_is_skipped",
+    "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_mixed_batch_refuses_invalid_inputs_but_accepts_verified_resume_skips",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_multivolume_success_is_recorded_and_source_change_reprocesses",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_preparer_path_does_not_depend_on_current_directory",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_receipt_write_failure_keeps_previous_receipt",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_same_stem_inputs_have_distinct_stable_output_names",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_source_catalog_is_scanned_once_and_match_reused",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_source_directory_is_rejected",
+    "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_source_guided_completion_rejects_changed_text_even_with_same_stat",
     "tests.test_batch_processor_preflight.BatchProcessorPreflightTests.test_unresponsive_child_is_reaped_after_interrupt"
   ],
   "test_batch_reader_file_lifetime": [
@@ -1547,6 +1555,9 @@
     "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_invalid_revision_and_wrong_or_missing_snapshot_fail_without_plausible_identity",
     "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_metadata_missing_or_expected_package_version_mismatch_fails",
     "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_moving_branch_resolves_once_then_only_committed_snapshot_downloads",
+    "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_qwen_empty_metadata_is_not_a_measured_identity",
+    "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_qwen_metadata_timeout_publishes_audio_with_explicit_missing_identity",
+    "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_qwen_missing_metadata_executable_publishes_named_failure",
     "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_source_commit_names_real_clean_git_blob_and_dirty_source_is_refused"
   ],
   "test_cloud_reference_chain": [
@@ -1603,7 +1614,9 @@
     "tests.test_compare_decision_journal.CompareDecisionJournalTests.test_manual_loop_preserves_unsnapshotted_auto_prefix_on_interruption",
     "tests.test_compare_decision_journal.CompareDecisionJournalTests.test_native_killed_manual_session_recovers_last_decision_from_journal",
     "tests.test_compare_decision_journal.CompareDecisionJournalTests.test_targeted_reset_replays_journal_and_rewinds_before_discarding_selected_decision",
-    "tests.test_compare_decision_journal.CompareDecisionJournalTests.test_torn_final_record_recovers_durable_prefix_but_complete_corruption_fails_loudly"
+    "tests.test_compare_decision_journal.CompareDecisionJournalTests.test_torn_final_record_recovers_durable_prefix_but_complete_corruption_fails_loudly",
+    "tests.test_compare_decision_journal.CompareReviewLogPublicationTests.test_failed_rewrite_preserves_original_and_retry_removes_only_targets",
+    "tests.test_compare_decision_journal.CompareReviewLogPublicationTests.test_missing_log_is_not_created_and_empty_result_is_published"
   ],
   "test_compare_prescan_reuse": [
     "tests.test_compare_prescan_reuse.ComparePrescanReuseTests.test_changed_source_threshold_and_nouns_recompute",
@@ -5164,8 +5177,10 @@
     "tests.test_preparer_input_output_contract.PreparerInputOutputContractTests.test_batch_both_input_modes_share_quality_validation_before_staging_or_claim",
     "tests.test_preparer_input_output_contract.PreparerInputOutputContractTests.test_download_refuses_non_zip_and_resolved_non_zip_symlink",
     "tests.test_preparer_input_output_contract.PreparerInputOutputContractTests.test_native_batch_collision_tries_one_and_retains_prior_outputs",
+    "tests.test_preparer_input_output_contract.PreparerInputOutputContractTests.test_numeric_booleans_refuse_before_request_coercion_or_launch",
     "tests.test_preparer_input_output_contract.PreparerInputOutputContractTests.test_single_bad_numeric_values_refuse_before_staging_or_claim",
-    "tests.test_preparer_input_output_contract.PreparerInputOutputContractTests.test_valid_boundary_values_are_preserved_without_mutating_input"
+    "tests.test_preparer_input_output_contract.PreparerInputOutputContractTests.test_valid_boundary_values_are_preserved_without_mutating_input",
+    "tests.test_preparer_input_output_contract.PreparerInputOutputContractTests.test_zip_listing_and_download_admit_all_extension_cases"
   ],
   "test_preparer_logging_lifecycle": [
     "tests.test_preparer_logging_lifecycle.PreparerLoggingLifecycleTests.test_explicit_setup_survives_reload_and_writes_once",
@@ -5215,15 +5230,18 @@
     "tests.test_preparer_run_state.PreparerRunStateTests.test_checkpoint_valid_entry_recovers_timeline",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_diarize_without_token_fails_before_starting_phases",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_enrichment_uses_requested_chunk_size_and_script_location",
+    "tests.test_preparer_run_state.PreparerRunStateTests.test_failed_tail_repair_preserves_checkpoint_and_samples_then_retry_recovers",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_invalid_cli_numbers_fail_before_starting_phases",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_keep_unaligned_allows_low_alignment_preflight",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_long_audio_asr_uses_disk_backed_samples_and_cleans_them",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_orchestrator_passes_lock_and_completed_asr_to_child",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_orchestrator_refuses_changed_input_before_phases",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_phase_command_keeps_values_named_like_phases",
+    "tests.test_preparer_run_state.PreparerRunStateTests.test_posix_directory_sync_failures_propagate_and_close_the_descriptor",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_requested_diarization_failure_is_not_empty_success",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_wav_directory_is_synced_before_checkpoint_record",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_wave_tags_replace_existing_frames",
+    "tests.test_preparer_run_state.PreparerRunStateTests.test_windows_directory_refusal_keeps_receipt_and_chunk_file_sync",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_zip_disambiguates_sanitized_group_collision",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_zip_refuses_empty_dataset",
     "tests.test_preparer_run_state.PreparerRunStateTests.test_zip_refuses_missing_wav_before_touching_output",
