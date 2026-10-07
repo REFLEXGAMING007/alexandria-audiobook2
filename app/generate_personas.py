@@ -252,6 +252,25 @@ def _is_attribution_tag(text):
     return bool(_ATTRIBUTION_TAG.match(stripped))
 
 
+_CHAPTER_HEADING = re.compile(
+    r"^\s*(?:chapter|part|section|book)\s+"
+    r"(?:\d+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten)\b",
+    re.IGNORECASE)
+
+
+def _is_chapter_heading(text):
+    """Whether a NARRATOR entry is a heading rather than prose.
+
+    Headings are attributed to the NARRATOR in an annotated script, so they
+    survive the narrator-label filter, and they are metadata rather than
+    narration: "Chapter 3: The Old Man at Seventy-Four" tells a persona writer
+    nothing about how anyone speaks while naming the age of the NEXT state. In a
+    per-state prompt it is worse than noise, because it contradicts the band the
+    prompt is asking for.
+    """
+    return bool(_CHAPTER_HEADING.match(str(text or "")))
+
+
 def _collect_narrator_context(script, speaker, window=4, entry_range=None):
     """Gather unique narrator lines within `window` entries of ANY appearance.
 
@@ -264,6 +283,20 @@ def _collect_narrator_context(script, speaker, window=4, entry_range=None):
     - `entry_range` (start, end) restricts both the search and the speaker's own
       appearances to one settled state, so a state persona is described by the
       narration around THAT state.
+
+    The forward window stops at the speaker's LAST appearance inside the range,
+    never at `entry_range[1]`. The ranges are built from the first entry of each
+    surviving state, so a range's end is where the NEXT state begins - and the
+    narration in between describes the transition into it. Measured on
+    state-voice-test.txt, MARO's adult range is entries 50..100 while his adult
+    lines end at 93; entries 94-99 narrate him turning old, and a forward window
+    of 4 from entry 91 alone reached entry 95. So the adult prompt was handed
+    "Chapter 3: The Old Man at Seventy-Four", "The second winter his wife died,
+    and Maro, who was seventy-four" and "At seventy-four he still spoke clearly"
+    alongside its thirty-eight-year-old lines. No error, no warning - the model
+    just gets contradictory evidence and picks one. Clamping to the last
+    appearance drops that block entirely, and costs nothing when the speaker's
+    last line really is the last entry of the book.
     """
     context_lines = []
     seen_lines = set()
@@ -273,16 +306,22 @@ def _collect_narrator_context(script, speaker, window=4, entry_range=None):
     speaker_indices = [i for i, entry in enumerate(script)
                        if lo <= i < hi and _entry_speaker(entry) == speaker]
 
+    # Forward context may never reach past the final appearance in this range.
+    # Backward context stays bounded by `lo`, so a lead-in is still collected.
+    forward_limit = (speaker_indices[-1] + 1) if speaker_indices else lo
+
     for idx in speaker_indices:
         start_idx = max(lo, idx - window)
-        end_idx = min(hi, idx + window + 1)
+        end_idx = min(forward_limit, idx + window + 1)
         for j in range(start_idx, end_idx):
             if j == idx:
                 continue
             entry_speaker = _entry_speaker(script[j]).upper()
             entry_text = _entry_text(script[j])
             if (entry_speaker in _NARRATOR_LABELS and entry_text
-                    and entry_text not in seen_lines and not _is_attribution_tag(entry_text)):
+                    and entry_text not in seen_lines
+                    and not _is_attribution_tag(entry_text)
+                    and not _is_chapter_heading(entry_text)):
                 seen_lines.add(entry_text)
                 context_lines.append(entry_text)
 
