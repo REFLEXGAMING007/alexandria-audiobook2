@@ -1155,11 +1155,20 @@
     "tests.test_candidate_scoring.ScoreTest.test_no_visible_candidate_declines_rather_than_picking",
     "tests.test_candidate_scoring.ScoreTest.test_the_best_scoring_candidate_wins"
   ],
+  "test_cast_apply_context_js": [
+    "tests.test_cast_apply_context_js.CastApplyContextJsTests.test_stale_matches_and_old_panel_submission_are_refused"
+  ],
+  "test_cast_bulk_outcome_js": [
+    "tests.test_cast_bulk_outcome_js.CastBulkOutcomeJsTests.test_all_failed_partial_success_and_empty_results_have_honest_headings"
+  ],
   "test_cast_label_warnings": [
     "tests.test_cast_label_warnings.CastLabelWarningTests.test_actual_ui_handlers_show_escaped_warnings_and_success_counts",
     "tests.test_cast_label_warnings.CastLabelWarningTests.test_bulk_warns_only_committed_books_and_preserves_errors_and_empty_books",
     "tests.test_cast_label_warnings.CastLabelWarningTests.test_secondary_timeout_preserves_committed_single_assignment",
     "tests.test_cast_label_warnings.CastLabelWarningTests.test_successful_label_recording_has_no_warning"
+  ],
+  "test_cast_library_request_order_js": [
+    "tests.test_cast_library_request_order_js.CastLibraryRequestOrderJsTests.test_creation_and_current_book_keep_newer_library_despite_old_response"
   ],
   "test_cast_list": [
     "tests.test_cast_list.CastListTest.test_a_list_generation_would_refuse_is_not_written",
@@ -1174,6 +1183,7 @@
     "tests.test_cast_list_safeguards_js.CastListSafeguardsJsTests.test_delete_cancel_book_switch_and_confirm",
     "tests.test_cast_list_safeguards_js.CastListSafeguardsJsTests.test_dirty_snapshot_detects_edits_added_removed_rows_and_refuses_changed_confirmation",
     "tests.test_cast_list_safeguards_js.CastListSafeguardsJsTests.test_editor_refresh_keeps_dirty_pending_and_inflight_edits",
+    "tests.test_cast_list_safeguards_js.CastListSafeguardsJsTests.test_failed_fetch_is_unknown_and_keeps_existing_editor_instead_of_claiming_absence",
     "tests.test_cast_list_safeguards_js.CastListSafeguardsJsTests.test_pending_failed_save_keeps_edits_blocks_duplicates_and_book_switch"
   ],
   "test_cast_list_ui": [
@@ -1940,6 +1950,7 @@
   "test_current_book_narrator_js": [
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_actual_preview_packet_retains_valid_choices_and_clears_removed_values",
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_book_and_version_changes_refresh_options_and_keep_only_valid_choices",
+    "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_deferred_preview_publication_requires_current_request_book_and_inputs",
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_snapshot_modal_cancel_and_book_switch_send_no_requests",
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_upload_reuse_saved_book_acknowledgements_drive_names_not_display_text"
   ],
@@ -4694,6 +4705,12 @@
     "tests.test_narrator_prompt.NarratorPromptTests.test_prior_names_narrator_without_mutating_base_prompt",
     "tests.test_narrator_prompt.NarratorPromptTests.test_valid_name_is_canonical_and_blank_disables_hint"
   ],
+  "test_narrator_strategy_ownership": [
+    "tests.test_narrator_strategy_ownership.NarratorStrategyOwnershipTests.test_current_token_saves_and_stale_token_preserves_native_config"
+  ],
+  "test_narrator_strategy_queue_js": [
+    "tests.test_narrator_strategy_queue_js.NarratorStrategyQueueJsTests.test_writes_are_ordered_and_bound_to_the_starting_book"
+  ],
   "test_nickname_batch": [
     "tests.test_nickname_batch.NicknameBatchTests.test_cli_impossible_context_keeps_script_and_registry_bytes",
     "tests.test_nickname_batch.NicknameBatchTests.test_complete_prompt_fits_shared_budget_with_large_cast_and_aliases",
@@ -5904,6 +5921,7 @@
     "tests.test_remote_failover_gate_js.RemoteFailoverGateJsTests.test_cost_warning_does_not_assume_provider_or_billing_model",
     "tests.test_remote_failover_gate_js.RemoteFailoverGateJsTests.test_every_real_starter_decline_prevents_requests_and_releases_claims",
     "tests.test_remote_failover_gate_js.RemoteFailoverGateJsTests.test_held_confirmation_blocks_owned_persona_and_voice_starts_before_side_effects",
+    "tests.test_remote_failover_gate_js.RemoteFailoverGateJsTests.test_loaded_book_can_retry_generation_after_failure_markup_changes",
     "tests.test_remote_failover_gate_js.RemoteFailoverGateJsTests.test_single_jobs_preserve_explicit_remote_choice_while_batch_remote_gate_remains"
   ],
   "test_remote_listener_shapes": [
@@ -6636,6 +6654,9 @@
     "tests.test_scoring_unicode_names.ScriptSurvivalTests.test_hanzi_survives",
     "tests.test_scoring_unicode_names.ScriptSurvivalTests.test_kana_and_kanji_survive"
   ],
+  "test_script_batch_narrator_drafts_js": [
+    "tests.test_script_batch_narrator_drafts_js.ScriptBatchNarratorDraftJsTests.test_add_sort_repeat_and_remove_preserve_only_remaining_file_drafts"
+  ],
   "test_script_cast_routes": [
     "tests.test_script_cast_routes.BatchCastTest.test_a_failed_build_fails_the_book_without_generating",
     "tests.test_script_cast_routes.BatchCastTest.test_asked_to_build_builds_then_generates_with_it",
@@ -7340,6 +7361,7 @@
     "tests.test_subprocess_owner_portability.SubprocessOwnerPortabilityTests.test_missing_sigkill_does_not_break_non_linux_worker_admission"
   ],
   "test_suggestion_candidate_queue_js": [
+    "tests.test_suggestion_candidate_queue_js.SuggestionCandidateQueueTests.test_cast_or_book_switch_refuses_late_suggestions_and_candidate_writes",
     "tests.test_suggestion_candidate_queue_js.SuggestionCandidateQueueTests.test_catalog_failure_retains_pool_warns_beside_success_and_clears_after_recovery",
     "tests.test_suggestion_candidate_queue_js.SuggestionCandidateQueueTests.test_collect_indexes_once_preserves_first_duplicate_and_refreshes_changed_library",
     "tests.test_suggestion_candidate_queue_js.SuggestionCandidateQueueTests.test_large_ranked_pool_bounds_active_writes_and_reports_failure_without_dropping_rest",
@@ -8373,7 +8395,8 @@
   "test_voice_autosave_metadata": [
     "tests.test_voice_autosave_metadata.VoiceAutosaveMetadataTests.test_actual_http_save_keeps_server_audit_and_reference_metadata",
     "tests.test_voice_autosave_metadata.VoiceAutosaveMetadataTests.test_bare_default_save_keeps_explicit_backend_persona_eligibility",
-    "tests.test_voice_autosave_metadata.VoiceAutosaveMetadataTests.test_collect_keeps_audit_and_zero_seed_without_inactive_voice_fields"
+    "tests.test_voice_autosave_metadata.VoiceAutosaveMetadataTests.test_collect_keeps_audit_and_zero_seed_without_inactive_voice_fields",
+    "tests.test_voice_autosave_metadata.VoiceAutosaveMetadataTests.test_unchanged_clone_collector_and_guarded_http_save_keep_style_and_description"
   ],
   "test_voice_book_snapshot": [
     "tests.test_voice_book_snapshot.VoiceBookSnapshotTests.test_catalog_switch_cannot_relabel_or_apply_previous_book_casting",
@@ -8574,6 +8597,9 @@
     "tests.test_voice_seed_repair_ui.VoiceSeedRepairTests.test_stale_voice_or_book_refuses_without_backup_or_write",
     "tests.test_voice_seed_repair_ui.VoiceSeedRepairUiTests.test_native_preview_one_click_and_changed_displayed_snapshot_refusal"
   ],
+  "test_voice_state_id_collisions": [
+    "tests.test_voice_state_id_collisions.VoiceStateIdCollisionTests.test_long_ids_and_existing_versions_remain_distinct_after_actual_route_writes"
+  ],
   "test_voice_state_load_feedback_js": [
     "tests.test_voice_state_load_feedback_js.VoiceStateLoadFeedbackJsTests.test_busy_retry_edits_and_book_ownership"
   ],
@@ -8590,6 +8616,9 @@
     "tests.test_voice_text_dialogs_js.VoiceTextDialogJsTests.test_age_dialog_cancel_duplicate_and_changed_target_refusal",
     "tests.test_voice_text_dialogs_js.VoiceTextDialogJsTests.test_audit_and_style_dialogs_preserve_blank_values_and_ownership",
     "tests.test_voice_text_dialogs_js.VoiceTextDialogJsTests.test_native_cast_and_version_admission_and_late_selections"
+  ],
+  "test_voice_timeline_book_ownership": [
+    "tests.test_voice_timeline_book_ownership.VoiceTimelineBookOwnershipTests.test_stale_version_save_timeline_save_and_clear_preserve_replacement_book"
   ],
   "test_voice_version_inheritance_js": [
     "tests.test_voice_version_inheritance_js.VoiceVersionInheritanceTests.test_flush_failure_or_changed_book_refuses_creation_and_no_ryan_override_is_sent"

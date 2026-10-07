@@ -187,6 +187,7 @@ def _validate_persona_recovery(value: str) -> tuple[str, str]:
     return normalized["description"], normalized["ref_text"]
 
 class VoiceVersionRequest(BaseModel):
+    book_token: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     version_id: str = Field(min_length=1, max_length=80)
     age_group: str = Field(default="adult", max_length=40)
     config: Dict = Field(default_factory=dict)
@@ -203,6 +204,7 @@ class VoiceCandidateFavoriteRequest(BaseModel):
 
 class NarratorStrategyRequest(BaseModel):
     strategy: NarratorStrategy
+    book_token: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class NarratorPreviewRequest(BaseModel):
@@ -230,6 +232,19 @@ def _mutate_voice_entry(speaker, mutator):
         mutator(entry)
         atomic_json_write(config, VOICE_CONFIG_PATH)
         return entry
+
+
+def _mutate_book_voice_entry(speaker, mutator, book_token=None):
+    with ensure_book_state(os.path.dirname(VOICE_CONFIG_PATH)):
+        if book_token is not None:
+            snapshot = get_book_snapshot(os.path.dirname(VOICE_CONFIG_PATH))
+            if get_book_snapshot_token(snapshot) != book_token:
+                raise HTTPException(status_code=409, detail="Active book changed; reload voices before saving")
+        _require_script_speaker(speaker)
+        entry = _mutate_voice_entry(speaker, mutator)
+        with file_lock(VOICE_CONFIG_PATH):
+            config = safe_load_json(VOICE_CONFIG_PATH, default={})
+            return entry, get_voice_config_revision(config)
 
 
 def get_script_speaker(entry):
@@ -286,14 +301,13 @@ def _ensure_voice_listing():
 
 @router.post("/api/voices/{speaker}/versions")
 async def save_voice_version(speaker: str, request: VoiceVersionRequest):
-    await asyncio.to_thread(_require_script_speaker, speaker)
     def save_version(current):
         config = request.config or {key: value for key, value in current.items()
                                     if key not in VERSION_OVERLAY_EXCLUDED}
         if config.get("type") not in {None, "custom", "clone", "design", "lora", "builtin_lora", "ensemble"}:
             raise HTTPException(status_code=422, detail="Unsupported voice version type")
         current.setdefault("versions", {})[request.version_id] = {**config, "age_group": request.age_group}
-    entry = await asyncio.to_thread(_mutate_voice_entry, speaker, save_version)
+    entry, _revision = await asyncio.to_thread(_mutate_book_voice_entry, speaker, save_version, request.book_token)
     return {"status": "saved", "speaker": speaker, "version_id": request.version_id,
             "versions": entry.get("versions", {})}
 
@@ -374,11 +388,10 @@ async def favorite_voice_candidate(speaker: str, candidate_id: str,
 
 @router.post("/api/narrator/strategy")
 async def save_narrator_strategy(request: NarratorStrategyRequest):
-    await asyncio.to_thread(_require_script_speaker, "NARRATOR")
-    entry = await asyncio.to_thread(_mutate_voice_entry, "NARRATOR", lambda current: current.update({
+    entry, revision = await asyncio.to_thread(_mutate_book_voice_entry, "NARRATOR", lambda current: current.update({
         "narrator_strategy": request.strategy
-    }))
-    return {"status": "saved", "strategy": entry.get("narrator_strategy")}
+    }), request.book_token)
+    return {"status": "saved", "strategy": entry.get("narrator_strategy"), "revision": revision}
 
 
 @router.post("/api/narrator/preview")
@@ -530,6 +543,7 @@ async def get_voice_state_timeline(speaker: str):
 
 
 class VersionTimelineRequest(BaseModel):
+    book_token: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     points: List[VoiceVersionPoint] = Field(max_length=50)
 
 
@@ -537,7 +551,6 @@ class VersionTimelineRequest(BaseModel):
 async def save_version_timeline(speaker: str, request: VersionTimelineRequest):
     """Apply a character's voice timeline. Every version must exist, or
     nothing is written."""
-    await asyncio.to_thread(_require_script_speaker, speaker)
     def save(current):
         versions = current.get("versions") or {}
         missing = [p.version_id for p in request.points
@@ -547,16 +560,15 @@ async def save_version_timeline(speaker: str, request: VersionTimelineRequest):
         points = {p.from_index: {"from_index": p.from_index, "version_id": p.version_id}
                   for p in request.points}
         current["version_timeline"] = [points[i] for i in sorted(points)]
-    entry = await asyncio.to_thread(_mutate_voice_entry, speaker, save)
+    entry, _revision = await asyncio.to_thread(_mutate_book_voice_entry, speaker, save, request.book_token)
     return {"status": "saved", "speaker": speaker, "version_timeline": entry.get("version_timeline", [])}
 
 
 @router.delete("/api/voices/{speaker}/version_timeline")
-async def clear_version_timeline(speaker: str):
-    await asyncio.to_thread(_require_script_speaker, speaker)
+async def clear_version_timeline(speaker: str, book_token: Optional[str] = None):
     def clear(current):
         current.pop("version_timeline", None)
-    await asyncio.to_thread(_mutate_voice_entry, speaker, clear)
+    await asyncio.to_thread(_mutate_book_voice_entry, speaker, clear, book_token)
     return {"status": "cleared", "speaker": speaker}
 
 
