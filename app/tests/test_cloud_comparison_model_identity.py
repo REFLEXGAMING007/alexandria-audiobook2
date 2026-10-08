@@ -22,6 +22,29 @@ helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
 
 
 class CloudComparisonModelIdentityTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'native Linux owned-hook cleanup')
+    def test_source_fsmonitor_timeout_reaps_hook_and_clean_control_still_matches(self):
+        import shlex
+        import time
+        source = self.source_repo()
+        pidfile = self.root / 'probe-hook.pid'
+        hook = self.root / 'probe-hook'
+        code = f'import os,pathlib,time;pathlib.Path({str(pidfile)!r}).write_text(str(os.getpid()));time.sleep(3)'
+        hook.write_text('#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' -c ' + shlex.quote(code) + '\n')
+        hook.chmod(0o700)
+        subprocess.run(['git', '-C', str(source), 'config', 'core.fsmonitor', str(hook)], check=True)
+        started = time.monotonic()
+        with patch.object(helper, 'GIT_PROBE_TIMEOUT_SECONDS', .2, create=True):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                helper.get_comparison_source_commit(source)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertTrue(pidfile.exists())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(int(pidfile.read_text()), 0)
+        subprocess.run(['git', '-C', str(source), 'config', '--unset', 'core.fsmonitor'], check=True)
+        expected = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
+        self.assertEqual(expected, helper.get_comparison_source_commit(source))
+
     def setUp(self):
         tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup);self.root=Path(tmp.name)
         self.commit='a'*40;self.snapshot=self.root/'cache/snapshots'/self.commit;self.snapshot.mkdir(parents=True)

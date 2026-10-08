@@ -600,6 +600,9 @@
     "tests.test_audit_candidate_membership.MembershipRecheckTest.test_it_finds_the_gaen_shape",
     "tests.test_audit_candidate_membership.MembershipRecheckTest.test_rows_without_a_candidate_list_are_not_checkable"
   ],
+  "test_audit_output_paths": [
+    "tests.test_audit_output_paths.AuditOutputPathTests.test_actual_cli_writes_and_checks_bare_and_nested_output_names"
+  ],
   "test_audit_serving_metadata": [
     "tests.test_audit_serving_metadata.ServingMetadataAuditTests.test_base_only_rejects_the_legacy_paired_claim",
     "tests.test_audit_serving_metadata.ServingMetadataAuditTests.test_baseline_summary_keeps_book_and_unanswered_counts",
@@ -1207,7 +1210,8 @@
     "tests.test_chain_artifact_scope.ArtifactScopeTests.test_every_chain_commit_call_declares_an_explicit_file_scope",
     "tests.test_chain_artifact_scope.ArtifactScopeTests.test_missing_new_file_is_noop_and_tracked_deletion_is_scoped",
     "tests.test_chain_artifact_scope.ArtifactScopeTests.test_missing_scope_refuses_without_changing_head_or_index",
-    "tests.test_chain_artifact_scope.ArtifactScopeTests.test_owned_checkpoint_and_stale_sidecars_commit_with_result_and_track_removal"
+    "tests.test_chain_artifact_scope.ArtifactScopeTests.test_owned_checkpoint_and_stale_sidecars_commit_with_result_and_track_removal",
+    "tests.test_chain_artifact_scope.ArtifactScopeTests.test_subdirectory_repo_argument_commits_only_selected_root_relative_artifact"
   ],
   "test_chain_book_fixtures": [
     "tests.test_chain_book_fixtures.ArchivedBatchInterpreterTests.test_new_batch_uses_checkout_interpreter_and_preserves_explicit_override",
@@ -1280,6 +1284,7 @@
     "tests.test_chain_stage_lib.StageRunnerTest.test_all_stages_passing_exits_zero",
     "tests.test_chain_stage_lib.StageRunnerTest.test_artifact_commit_preserves_unrelated_staged_change",
     "tests.test_chain_stage_lib.StageRunnerTest.test_each_stage_writes_its_own_log",
+    "tests.test_chain_stage_lib.StageRunnerTest.test_missing_dependency_name_refuses_without_loop_or_worker_in_plain_bash",
     "tests.test_chain_stage_lib.StageRunnerTest.test_requires_ok_skips_a_stage_whose_predecessor_failed",
     "tests.test_chain_stage_lib.StageRunnerTest.test_requires_ok_treats_a_stage_that_never_ran_as_unsatisfied",
     "tests.test_chain_stage_lib.StageRunnerTest.test_running_the_same_chain_twice_is_idempotent"
@@ -1605,7 +1610,8 @@
     "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_qwen_empty_metadata_is_not_a_measured_identity",
     "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_qwen_metadata_timeout_publishes_audio_with_explicit_missing_identity",
     "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_qwen_missing_metadata_executable_publishes_named_failure",
-    "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_source_commit_names_real_clean_git_blob_and_dirty_source_is_refused"
+    "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_source_commit_names_real_clean_git_blob_and_dirty_source_is_refused",
+    "tests.test_cloud_comparison_model_identity.CloudComparisonModelIdentityTests.test_source_fsmonitor_timeout_reaps_hook_and_clean_control_still_matches"
   ],
   "test_cloud_reference_chain": [
     "tests.test_cloud_reference_chain.CloudReferenceChainTests.test_arm0_is_checked_before_any_expensive_worker",
@@ -1905,6 +1911,9 @@
     "tests.test_corpus_owned_summaries.CorpusOwnedSummaryTests.test_pending_interrupted_pair_is_not_silently_omitted",
     "tests.test_corpus_owned_summaries.CorpusOwnedSummaryTests.test_stored_dataset_summary_or_inputs_changed_are_explicit_failures",
     "tests.test_corpus_owned_summaries.CorpusOwnedSummaryTests.test_unrelated_logs_do_not_affect_metrics_and_resume_totals_are_not_added_twice"
+  ],
+  "test_corpus_plan_failures": [
+    "tests.test_corpus_plan_failures.CorpusPlanFailureTests.test_discovery_and_display_failures_refuse_but_valid_empty_plan_succeeds"
   ],
   "test_corpus_prefix": [
     "tests.test_corpus_prefix.CorpusPrefixTests.test_real_shell_dispatch_bounds_each_asr_request",
@@ -2754,6 +2763,7 @@
     "tests.test_experiment_infra.AnalysisScriptTest.test_offline_analyses_declare_their_caveats",
     "tests.test_experiment_infra.CollectResultsHostProvenanceTests.test_csv_host_matches_the_environment_used_for_machine_classification",
     "tests.test_experiment_infra.CollectResultsMetadataShapeTests.test_malformed_metadata_is_reported_without_losing_valid_artifacts",
+    "tests.test_experiment_infra.CollectResultsRobustnessTest.test_actual_csv_preserves_seed_zero_and_distinguishes_missing_seed",
     "tests.test_experiment_infra.CollectResultsRobustnessTest.test_csv_uses_repository_lf_line_endings",
     "tests.test_experiment_infra.CollectResultsRobustnessTest.test_results_index_check_fails_when_audit_status_changes",
     "tests.test_experiment_infra.CollectResultsRobustnessTest.test_results_index_is_independent_of_local_timezone",
@@ -3519,7 +3529,8 @@
     "tests.test_gpu_queue_rotation.QueueRotationTests.test_bad_archive_destination_refuses_record_and_releases_lock",
     "tests.test_gpu_queue_rotation.QueueRotationTests.test_concurrent_writers_rotate_without_losing_or_splitting_records",
     "tests.test_gpu_queue_rotation.QueueRotationTests.test_pause_and_resume_use_rotation_and_fail_loud_on_bad_log",
-    "tests.test_gpu_queue_rotation.QueueRotationTests.test_retention_preserves_active_start_beyond_all_archives"
+    "tests.test_gpu_queue_rotation.QueueRotationTests.test_retention_preserves_active_start_beyond_all_archives",
+    "tests.test_gpu_queue_rotation.QueueRotationTests.test_status_words_in_names_do_not_clear_start_but_terminal_fields_do"
   ],
   "test_gpu_source_identity": [
     "tests.test_gpu_source_identity.SourceIdentityTests.test_binary_untracked_and_odd_names_are_restorable_from_patch",
@@ -4567,6 +4578,7 @@
   "test_managed_server_chain": [
     "tests.test_managed_server_chain.ManagedServerChainTests.test_duplicate_launch_is_refused_without_overwriting_owned_pid",
     "tests.test_managed_server_chain.ManagedServerChainTests.test_early_exit_is_not_readiness_and_remains_reaped",
+    "tests.test_managed_server_chain.ManagedServerChainTests.test_healthy_fixture_waits_for_delayed_http_start_without_relaxing_owner_checks",
     "tests.test_managed_server_chain.ManagedServerChainTests.test_healthy_owned_listener_admits_requests_then_stops_and_reaps",
     "tests.test_managed_server_chain.ManagedServerChainTests.test_never_ready_term_ignoring_child_is_killed_and_reaped",
     "tests.test_managed_server_chain.ManagedServerChainTests.test_shared_start_refuses_unowned_claim_before_launching_child",
@@ -4642,6 +4654,7 @@
     "tests.test_model_download_publication.ModelDownloadPublicationTests.test_failed_model_or_processor_save_never_publishes_or_damages_prior_bundle",
     "tests.test_model_download_publication.ModelDownloadPublicationTests.test_failed_rollback_preserves_previous_bundle_with_visible_recovery_path",
     "tests.test_model_download_publication.ModelDownloadPublicationTests.test_native_cli_processor_failure_leaves_no_final_directory",
+    "tests.test_model_download_publication.ModelDownloadPublicationTests.test_post_publish_backup_cleanup_failure_warns_without_false_download_failure",
     "tests.test_model_download_publication.ModelDownloadPublicationTests.test_success_publishes_both_files_and_failed_replace_restores_previous"
   ],
   "test_model_list_endpoint_policy": [
@@ -5928,12 +5941,14 @@
     "tests.test_release_verifier.ReleaseVerifierTests.test_api_summary_rejects_wrong_skip_identity_with_same_counts",
     "tests.test_release_verifier.ReleaseVerifierTests.test_api_summary_uses_suite_inventory_for_quick_and_full_results",
     "tests.test_release_verifier.ReleaseVerifierTests.test_failed_command_terminates_grandchild_process",
+    "tests.test_release_verifier.ReleaseVerifierTests.test_git_quoted_unicode_and_newline_names_are_compiled_as_actual_paths",
     "tests.test_release_verifier.ReleaseVerifierTests.test_json_report_is_written_on_failure_with_secrets_redacted",
     "tests.test_release_verifier.ReleaseVerifierTests.test_json_report_marks_interrupted_gate_and_returns_130",
     "tests.test_release_verifier.ReleaseVerifierTests.test_json_report_records_successful_gates_and_api_results",
     "tests.test_release_verifier.ReleaseVerifierTests.test_keyboard_interrupt_stops_child_group_before_propagating",
     "tests.test_release_verifier.ReleaseVerifierTests.test_non_utf8_child_output_is_shown_not_fatal",
     "tests.test_release_verifier.ReleaseVerifierTests.test_python_compilation_includes_nonignored_untracked_files",
+    "tests.test_release_verifier.ReleaseVerifierTests.test_stalled_git_fsmonitor_fails_with_bounded_owned_cleanup",
     "tests.test_release_verifier.ReleaseVerifierTests.test_unittest_final_summary_supersedes_nested_fixture_summaries",
     "tests.test_release_verifier.ReleaseVerifierTests.test_unittest_nested_success_cannot_hide_an_invalid_final_summary",
     "tests.test_release_verifier.ReleaseVerifierTests.test_unittest_summary_rejects_a_suite_that_collapsed_to_nothing",
@@ -7381,6 +7396,10 @@
   ],
   "test_subprocess_owner_portability": [
     "tests.test_subprocess_owner_portability.SubprocessOwnerPortabilityTests.test_missing_sigkill_does_not_break_non_linux_worker_admission"
+  ],
+  "test_subset_run_receipts": [
+    "tests.test_subset_run_receipts.SubsetRunReceiptTests.test_both_completion_receipts_preserve_full_zip_name_and_actual_size",
+    "tests.test_subset_run_receipts.SubsetRunReceiptTests.test_each_run_clears_prior_status_and_preserves_prior_zip_artifacts"
   ],
   "test_suggestion_candidate_queue_js": [
     "tests.test_suggestion_candidate_queue_js.SuggestionCandidateQueueTests.test_cast_or_book_switch_refuses_late_suggestions_and_candidate_writes",

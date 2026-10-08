@@ -3,7 +3,9 @@
 # Runs as a detached background job; logs to test_corpus_output/watchdog.log.
 # Safe to start while a run is already in progress.
 
-OUT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)/test_corpus_output"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+source "$SCRIPT_DIR/run_chains/lib/subset_outputs.sh" || exit 1
+OUT_DIR="$SCRIPT_DIR/test_corpus_output"
 mkdir -p "$OUT_DIR"
 LOG="$OUT_DIR/watchdog.log"
 SESSION=prep
