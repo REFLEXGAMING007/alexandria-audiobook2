@@ -15,6 +15,7 @@ const ctx={window:null,document:{getElementById:el},API:{post:async()=>{if(refus
 vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);
 function load(start,end){const a=core.indexOf(start),b=core.indexOf(end,a);assert(a>=0&&b>a);run(core.slice(a,b));}
 load('function escapeHtml(', '// Parse a numeric input');
+load('function showActionError(', 'function showConfirm(');
 if(core.includes('let currentBookFilename =')){load('let currentBookFilename =','async function loadConfig()');}
 load('window.selectExistingScriptUpload =', '// Generate resumes saved progress');
 load('window.snapshotScript =','window.cancelScript =');
@@ -76,4 +77,15 @@ for(const change of ['book','strategy','focus','version']){select();const before
 }
 select();const staleIndex=posts.length,staleError=ctx.previewNarratorSelection();const latestIndex=posts.length,latest=ctx.previewNarratorSelection();posts[latestIndex].resolve({selected:{voice:'Current'}});await latest;posts[staleIndex].reject(Error('old failure'));await staleError;assert.strictEqual(errors.length,0);assert.strictEqual(el('narrator-preview-status').textContent,'Selected Current.');
 const errorIndex=posts.length,currentError=ctx.previewNarratorSelection();posts[errorIndex].reject(Error('current failure'));await currentError;assert.strictEqual(errors.length,1);
+""")
+
+    def test_existing_upload_writes_are_serialized_and_only_latest_selection_publishes(self):
+        self.run_js(r"""
+const pending=[];ctx.API.post=(path,body)=>new Promise((resolve,reject)=>pending.push({path,body,resolve,reject}));const turn=()=>new Promise(resolve=>setImmediate(resolve));
+ctx.applyCurrentBookFilename('initial.txt');el('existing-upload-select').value='A.txt';const a=ctx.selectExistingScriptUpload();await turn();assert.strictEqual(pending.length,1);
+el('existing-upload-select').value='B.txt';const b=ctx.selectExistingScriptUpload();await turn();assert.strictEqual(pending.length,1,'only one backend selection may be in flight');
+pending[0].resolve({stored_filename:'A.txt'});await a;await turn();assert.strictEqual(run('currentBookFilename'),'initial.txt');assert.strictEqual(pending.length,2);assert.strictEqual(pending[1].body.filename,'B.txt');pending[1].resolve({stored_filename:'B.txt'});await b;assert.strictEqual(run('currentBookFilename'),'B.txt');assert(el('upload-status').innerHTML.includes('B.txt'));
+el('existing-upload-select').value='C.txt';const c=ctx.selectExistingScriptUpload();await turn();ctx.applyCurrentBookFilename('other.json');el('upload-status').innerHTML='Other book loaded';pending[2].resolve({stored_filename:'C.txt'});await c;assert.strictEqual(run('currentBookFilename'),'other.json');assert.strictEqual(el('upload-status').innerHTML,'Other book loaded');
+el('existing-upload-select').value='D.txt';const d=ctx.selectExistingScriptUpload();await turn();pending[3].reject(Error('current failure'));await d;assert(el('upload-status').innerHTML.includes('current failure'));
+el('existing-upload-select').value='E.txt';const e=ctx.selectExistingScriptUpload();await turn();pending[4].resolve({stored_filename:'E.txt'});await e;assert.strictEqual(run('currentBookFilename'),'E.txt');
 """)

@@ -399,7 +399,7 @@
             return logs.some(log => {
                 const line = String(log)
                     .replace(/\b(?:0|zero|no)\s+(?:(?:batch\(es\)|section\(s\)|batches|sections)\s+)?(?:errors?|failures?|failed)\b(?:\s+or\s+(?:errors?|failures?))?/gi, '')
-                    .replace(/\b(?:failed|failures?)\s*(?:count\s*)?[:=]\s*0(?![\d.])/gi, '')
+                    .replace(/\b(?:errors?|failed|failures?)\s*(?:count\s*)?[:=]\s*0(?!\d|\.\d)/gi, '')
                     .replace(/\bwithout (?:any |recorded )?(?:errors?|failures?|failed)(?: or skipped sections)?\b/gi, '');
                 return /\b(error|errors|failed|failure|failures)\b/i.test(line);
             });
@@ -528,7 +528,7 @@
             target.style.display = 'block';
 
             const nav = document.getElementById('navbarNav');
-            if (nav.classList.contains('show') && window.innerWidth < 768) {
+            if (nav.classList.contains('show') && window.innerWidth < 992) {
                 bootstrap.Collapse.getOrCreateInstance(nav).hide();
             }
 
@@ -858,11 +858,20 @@
 
         async function autoConfigureSettings() {
             const btn = document.getElementById('btn-auto-configure');
+            const request = {};
+            btn._autoConfigureRequest = request;
+            const snapshot = getAutoSettingsSnapshot();
+            const isCurrent = () => btn._autoConfigureRequest === request;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Detecting…';
 
             try {
                 const stats = await API.get('/api/system/stats');
+                if (!isCurrent()) { return; }
+                if (getAutoSettingsSnapshot() !== snapshot) {
+                    showToast('The TTS settings changed during detection. Your edits were kept; review them before running Auto-Configure again.', 'warning');
+                    return;
+                }
                 const { settings, summary } = _computeAutoSettings(stats);
                 _applyAutoSettings(settings);
 
@@ -872,11 +881,27 @@
                 banner.style.display = '';
                 banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } catch (e) {
-                showActionError('Hardware detection failed', e, 'Review the hardware details and TTS settings before trying Auto-Configure again.');
+                if (isCurrent()) { showActionError('Hardware detection failed', e, 'Review the hardware details and TTS settings before trying Auto-Configure again.'); }
             } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-magic me-1"></i>Auto-Configure';
+                if (isCurrent()) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-magic me-1"></i>Auto-Configure';
+                }
             }
+        }
+
+        function getAutoSettingsFields() {
+            return {
+                ttsMode: ['tts-mode', 'value'], parallelWorkers: ['parallel-workers', 'value'],
+                compileCodec: ['compile-codec', 'checked'], batchGroupByType: ['batch-group-by-type', 'checked'],
+                subBatchEnabled: ['sub-batch-enabled', 'checked'], subBatchMinSize: ['sub-batch-min-size', 'value'],
+                subBatchRatio: ['sub-batch-ratio', 'value'], subBatchMaxItems: ['sub-batch-max-items', 'value'],
+            };
+        }
+
+        function getAutoSettingsSnapshot() {
+            return JSON.stringify(Object.entries(getAutoSettingsFields()).map(([key, [id, property]]) =>
+                [key, document.getElementById(id)[property]]));
         }
 
         function _computeAutoSettings(stats) {
@@ -950,16 +975,11 @@
         }
 
         function _applyAutoSettings(s) {
-            document.getElementById('tts-mode').value = s.ttsMode;
+            for (const [key, [id, property]] of Object.entries(getAutoSettingsFields())) {
+                document.getElementById(id)[property] = s[key];
+            }
             toggleTTSMode();
-            document.getElementById('parallel-workers').value = s.parallelWorkers;
-            document.getElementById('compile-codec').checked = s.compileCodec;
-            document.getElementById('batch-group-by-type').checked = s.batchGroupByType;
-            document.getElementById('sub-batch-enabled').checked = s.subBatchEnabled;
             toggleSubBatchFields();
-            document.getElementById('sub-batch-min-size').value = s.subBatchMinSize;
-            document.getElementById('sub-batch-ratio').value = s.subBatchRatio;
-            document.getElementById('sub-batch-max-items').value = s.subBatchMaxItems;
         }
 
         // Local/Remote LLM profile state. Each mode keeps its own base_url/key/model
@@ -1059,7 +1079,19 @@
         }
 
         function renderPassPromptPresets(pass, presets, activeName) {
-            passPromptPresets[pass] = Array.isArray(presets) ? presets : [];
+            const own = Array.isArray(presets) ? presets.map(preset => ({...preset})) : [];
+            const names = new Set(own.map(preset => preset.name));
+            for (const preset of own) {
+                if (preset.name !== 'default') { continue; }
+                let name = 'default (user)';
+                let suffix = 2;
+                while (names.has(name)) { name = `default (user ${suffix++})`; }
+                names.add(name);
+                preset.name = name;
+                if (activeName === 'default') { activeName = name; }
+                showToast(`The ${pass} user preset "default" is now "${name}" to keep it separate from the checked-in prompt. Save configuration to retain this name.`, 'warning');
+            }
+            passPromptPresets[pass] = own;
             activePassPromptPreset[pass] = activeName || 'default';
             const select = document.getElementById(`${pass}-prompt-preset-select`);
             if (!select) { return; }
@@ -1089,17 +1121,24 @@
             activePassPromptPreset[pass] = preset?.name || 'default';
         }
 
+        function getPassPromptPresetNameError(name) {
+            return name.trim() === 'default' ? 'The name "default" is reserved for the checked-in prompt.' : '';
+        }
+
         window.savePassPromptPreset = async (pass) => {
             const fields = passPromptFields(pass);
             const snapshot = getPromptPresetEditorSnapshot(pass);
             const values = await showPresetEditor({title: `Save ${pass} prompt preset`,
-                name: activePassPromptPreset[pass] === 'default' ? '' : activePassPromptPreset[pass]});
+                name: activePassPromptPreset[pass] === 'default' ? '' : activePassPromptPreset[pass],
+                validateName: getPassPromptPresetNameError});
             if (!values) { return; }
             if (getPromptPresetEditorSnapshot(pass) !== snapshot) {
                 showToast('The prompt or preset selection changed. Review it before saving a preset.', 'warning');
                 return;
             }
             const {name, description} = values;
+            const nameError = getPassPromptPresetNameError(name);
+            if (nameError) { showToast(nameError, 'warning'); return; }
             const preset = {name: name.trim(), description: description.trim(),
                 system_prompt: document.getElementById(fields.system).value,
                 user_prompt: document.getElementById(fields.user).value};
@@ -1294,6 +1333,7 @@
         }
 
         async function persistPromptPresets(overrides, onSaved) {
+            syncCurrentLlmProfile();
             const workers = Math.max(1, parseInt(document.getElementById('parallel-workers').value) || 2);
             const payload = buildConfigPayload(workers);
             payload.prompts = {...payload.prompts, ...overrides.prompts};
@@ -1394,16 +1434,26 @@
         };
 
         window.previewAttributionPrompt = async () => {
+            const request = {};
+            window._attributionPreviewRequest = request;
+            const snapshot = getPromptPresetEditorSnapshot('attribution');
+            const contextChars = document.getElementById('tp-attribute-context-chars').value;
+            const isCurrent = () => window._attributionPreviewRequest === request
+                && getPromptPresetEditorSnapshot('attribution') === snapshot
+                && document.getElementById('tp-attribute-context-chars').value === contextChars;
             const preset = selectedPromptPreset();
             const body = {variant: (preset && preset.variant) || 'default', ...promptBoxes(),
                 context_chars: getNumFieldValue('tp-attribute-context-chars', 0, true)};
             try {
                 const preview = await API.post('/api/prompts/attribution_preview', body);
+                if (!isCurrent()) { return; }
                 document.getElementById('prompt-preview-note').textContent = preview.note || '';
                 document.getElementById('prompt-preview-system').textContent = preview.system_prompt || '';
                 document.getElementById('prompt-preview-user').textContent = preview.user_message || '';
                 document.getElementById('prompt-preview-panel').hidden = false;
-            } catch (e) { showActionError('Could not render the prompt', e, 'Check the prompt templates and provider settings, then try What the model will see again.'); }
+            } catch (e) {
+                if (isCurrent()) { showActionError('Could not render the prompt', e, 'Check the prompt templates and provider settings, then try What the model will see again.'); }
+            }
         };
 
         function renderConfigWarnings(config) {
@@ -1668,8 +1718,27 @@
         }
 
         async function loadConfig() {
+            const request = {};
+            loadConfig.request = request;
+            const isCurrent = () => loadConfig.request === request;
+            const getDraftSnapshot = () => JSON.stringify(Array.from(document.getElementById('config-form').elements || [])
+                .filter(field => !['button', 'submit', 'reset'].includes(field.type))
+                .map(field => [field.id, field.value, field.checked]));
+            const snapshot = getDraftSnapshot();
+            const showKeptDraft = () => {
+                document.getElementById('config-warning-msg').textContent = 'Your settings changed while configuration was loading. Your edits were kept. Retry loading to review replacing them with saved settings.';
+                document.getElementById('config-warning-banner').style.display = '';
+                document.getElementById('config-load-retry').style.display = '';
+            };
             try {
+                if (loadConfig.draftSnapshot !== undefined && snapshot !== loadConfig.draftSnapshot) {
+                    if (!await showConfirm('Reload saved configuration? This replaces the edits currently shown in Setup. Discard these unsaved settings?', {title: 'Replace edited settings?', actionLabel: 'Reload settings', danger: true})) { return; }
+                    if (!isCurrent()) { return; }
+                    if (snapshot !== getDraftSnapshot()) { showKeptDraft(); return; }
+                }
                 const config = await API.get('/api/config');
+                if (!isCurrent()) { return; }
+                if (snapshot !== getDraftSnapshot()) { showKeptDraft(); return; }
                 legacyChunkSize = 3000;
                 document.getElementById('max-tokens').value = 4096;
                 renderConfigWarnings(config);
@@ -1768,7 +1837,10 @@
                     document.getElementById('upload-status').innerHTML =
                         `<span class="text-success"><i class="fas fa-check me-1"></i>Loaded: ${escapeHtml(config.current_file)}</span>`;
                 }
+                loadConfig.draftSnapshot = getDraftSnapshot();
             } catch (e) {
+                if (!isCurrent()) { return; }
+                if (loadConfig.draftSnapshot === undefined) { loadConfig.draftSnapshot = snapshot; }
                 console.error("Failed to load config", e);
                 document.getElementById('config-warning-msg').textContent =
                     'Could not load configuration: ' + (e.message || String(e)) + '. Retry before saving settings.';
@@ -1977,22 +2049,37 @@
             const select = document.getElementById('existing-upload-select');
             if (!select.value) { return; }
             const filename = select.value;
+            let book = currentBookFilename;
+            const request = {};
+            window._existingUploadSelectionRequest = request;
+            const isCurrent = () => window._existingUploadSelectionRequest === request
+                && select.value === filename && currentBookFilename === book;
             if (!await ensureCastListEditsDiscardable()) {
-                if (select.value === filename) { select.value = currentBookFilename; }
+                if (isCurrent()) { select.value = currentBookFilename; }
                 return;
             }
-            if (select.value !== filename) { return; }
+            if (!isCurrent()) { return; }
             const statusEl = document.getElementById('upload-status');
-            try {
+            const previous = window._existingUploadSelectionPending || Promise.resolve();
+            const selecting = (async () => {
+                await previous.catch(() => {});
+                if (!isCurrent()) { return; }
                 const result = await API.post('/api/uploads/select', { filename });
+                if (!isCurrent()) { return; }
                 applyCurrentBookFilename(result.stored_filename);
+                book = currentBookFilename;
                 document.getElementById('file-upload').value = '';
                 statusEl.innerHTML = `<span class="text-success"><i class="fas fa-check me-1"></i>Reusing: ${escapeHtml(result.stored_filename)}</span>`;
                 document.getElementById('cast-list-panel').style.display = 'none';
                 clearCastListEditor();
                 await loadCastList(false);
-            } catch (e) {
-                statusEl.innerHTML = `<span class="text-danger">${escapeHtml(getActionErrorMessage('Book selection was not confirmed', e, 'Check the current loaded book before selecting another upload.'))}</span>`;
+            })();
+            window._existingUploadSelectionPending = selecting;
+            try { await selecting; }
+            catch (e) {
+                if (isCurrent()) { statusEl.innerHTML = `<span class="text-danger">${escapeHtml(getActionErrorMessage('Book selection was not confirmed', e, 'Check the current loaded book before selecting another upload.'))}</span>`; }
+            } finally {
+                if (window._existingUploadSelectionPending === selecting) { window._existingUploadSelectionPending = null; }
             }
         };
 
@@ -2694,7 +2781,7 @@
 
         let scriptBatchStartOperation = null;
         window.cancelBatchScript = () => {
-            if (scriptBatchStartOperation && scriptBatchStartOperation.phase !== 'started') {
+            if (scriptBatchStartOperation && !['started', 'unconfirmed'].includes(scriptBatchStartOperation.phase)) {
                 scriptBatchStartOperation.cancelled = true;
                 document.getElementById('script-batch-status-msg').innerHTML =
                     '<span class="text-muted">Cancelling batch preparation…</span>';
@@ -2715,6 +2802,7 @@
             const operation = { cancelled: false, phase: 'preparing' };
             scriptBatchStartOperation = operation;
             let started = false;
+            let startUnconfirmed = false;
 
             const btn = document.getElementById('btn-gen-script');
             const pauseBtn = document.getElementById('btn-pause-batch-script');
@@ -2799,14 +2887,26 @@
                 _pollScriptBatchLogs();
                 if (operation.cancelled) { await cancelBatchScript(); }
             } catch (e) {
-                if (!operation.cancelled) { showActionError("Failed to start batch", e, "Check the batch task state, selected books and Test Connection in Setup before starting another batch."); }
+                if (operation.phase === 'starting') {
+                    const refused = Number.isInteger(e.status) && e.status >= 400 && e.status < 500 && e.status !== 408;
+                    operation.phase = refused ? 'refused' : 'unconfirmed';
+                    statusMsg.innerHTML = refused
+                        ? '<span class="text-danger">Batch start was refused. Review the error before trying again.</span>'
+                        : '<span class="text-warning">Batch start is unconfirmed. Checking task activity; generation may have started.</span>';
+                    showActionError('Batch start was not confirmed', e, 'Check the batch task activity before starting another batch; work may still be running.');
+                    if (!refused) {
+                        startUnconfirmed = true;
+                        _pollScriptBatchLogs();
+                        if (operation.cancelled) { await cancelBatchScript(); }
+                    }
+                } else if (!operation.cancelled) { showActionError("Failed to start batch", e, "Check the batch task state, selected books and Test Connection in Setup before starting another batch."); }
             } finally {
                 if (scriptBatchStartOperation === operation) { scriptBatchStartOperation = null; }
-                if (!started) {
+                if (!started && !startUnconfirmed) {
                     btn.disabled = false;
                     pauseBtn.style.display = 'none';
                     document.getElementById('btn-cancel-batch-script').style.display = 'none';
-                    if (operation.cancelled) {
+                    if (operation.cancelled && operation.phase === 'preparing') {
                         statusMsg.innerHTML = '<span class="text-muted">Batch cancelled before generation started.</span>';
                     }
                 }
@@ -2978,10 +3078,16 @@
         // `onLoaded` (which should store it and call the matching render function).
         async function _loadScriptList(containerId, onLoaded) {
             const container = document.getElementById(containerId);
+            const request = {};
+            container._scriptListRequest = request;
+            const isCurrent = () => container._scriptListRequest === request
+                && container === document.getElementById(containerId);
             try {
                 const scripts = await API.get('/api/scripts');
+                if (!isCurrent()) { return; }
                 onLoaded(scripts);
             } catch (e) {
+                if (!isCurrent()) { return; }
                 container.innerHTML = `<span class="text-danger small">${escapeHtml(getActionErrorMessage('Could not load saved scripts', e, 'Check that Alexandria is running, then refresh the saved-script list before choosing a book.'))}</span>`;
             }
         }
@@ -7134,6 +7240,7 @@
         }
         function renderChapterList(rows, exported) {
             const el = document.getElementById('chapter-list');
+            document.getElementById('chapter-zip-link').style.display = exported && rows.some(r => r.exists) ? '' : 'none';
             if (!rows.length) { el.innerHTML = `<span class="text-muted">${exported ? 'No exported chapter files found.' : 'No chapter files would be written.'}</span>`; return; }
             el.innerHTML = '<ol class="mb-0 ps-3">' + rows.map(r => {
                 const name = escapeHtml(r.file);
@@ -7142,12 +7249,11 @@
                 }
                 return `<li><span class="font-monospace">${name}</span></li>`;
             }).join('') + '</ol>';
-            document.getElementById('chapter-zip-link').style.display = exported && rows.some(r => r.exists) ? '' : 'none';
         }
         async function loadChapterExports() {
             try {
                 const m = await API.get('/api/chapter_exports');
-                if (m.chapters && m.chapters.length) { renderChapterList(m.chapters, true); }
+                if (Array.isArray(m.chapters)) { renderChapterList(m.chapters, true); }
             } catch (e) { /* nothing exported yet */ }
         }
         async function getChapterExportPreview(params) {

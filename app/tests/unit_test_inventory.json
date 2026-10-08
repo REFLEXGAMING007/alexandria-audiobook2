@@ -740,7 +740,8 @@
     "tests.test_batch_script_cancel_js.BatchScriptCancelJsTests.test_cancel_during_upload_preflight_or_confirmation_never_starts_generation",
     "tests.test_batch_script_cancel_js.BatchScriptCancelJsTests.test_cancel_while_start_post_is_pending_waits_for_ack_then_cancels_worker",
     "tests.test_batch_script_cancel_js.BatchScriptCancelJsTests.test_cancelled_upload_failure_is_cancellation_and_normal_failure_releases_start",
-    "tests.test_batch_script_cancel_js.BatchScriptCancelJsTests.test_cost_admission_blocks_duplicate_batch_starts_and_recovers_decline"
+    "tests.test_batch_script_cancel_js.BatchScriptCancelJsTests.test_cost_admission_blocks_duplicate_batch_starts_and_recovers_decline",
+    "tests.test_batch_script_cancel_js.BatchScriptCancelJsTests.test_lost_start_ack_keeps_monitoring_and_cancels_registered_worker"
   ],
   "test_batch_script_concurrency": [
     "tests.test_batch_script_concurrency.BatchScriptConcurrencyTests.test_batch_source_accepts_attested_narrator",
@@ -1324,6 +1325,9 @@
     "tests.test_chapter_export.RouteTests.test_preview_rejects_the_same_invalid_padding_as_export",
     "tests.test_chapter_export.RouteTests.test_zip_404s_when_nothing_is_exported_and_serves_only_listed_files"
   ],
+  "test_chapter_export_empty_ui": [
+    "tests.test_chapter_export_empty_ui.ChapterExportEmptyUiTests.test_native_empty_receipt_and_empty_renderer_remove_stale_downloads"
+  ],
   "test_chapter_input_safety_js": [
     "tests.test_chapter_input_safety_js.ChapterInputSafetyJsTests.test_delete_requires_current_confirmation_and_preserves_storage_on_cancel_or_change",
     "tests.test_chapter_input_safety_js.ChapterInputSafetyJsTests.test_import_size_is_checked_before_reader_and_boundary_valid_file_round_trips",
@@ -1780,6 +1784,9 @@
     "tests.test_config_secret_redaction.RedactedKeyResolutionTests.test_sentinel_resolves_to_the_matching_profile_key",
     "tests.test_config_secret_redaction.RedactionKeepsNonJsonObjects.test_pydantic_values_survive_redaction"
   ],
+  "test_config_state_shapes": [
+    "tests.test_config_state_shapes.ConfigStateShapeTests.test_invalid_top_level_and_input_path_shapes_keep_config_available_and_read_only"
+  ],
   "test_config_validation_focus_js": [
     "tests.test_config_validation_focus_js.ConfigValidationFocusTests.test_rejected_values_reveal_field_without_changing_it"
   ],
@@ -1845,6 +1852,7 @@
   ],
   "test_core_dom_inputs_js": [
     "tests.test_core_dom_inputs_js.CoreDomInputTests.test_actual_config_loader_displays_filenames_as_text",
+    "tests.test_core_dom_inputs_js.CoreDomInputTests.test_collapsed_nav_closes_through_the_actual_large_breakpoint",
     "tests.test_core_dom_inputs_js.CoreDomInputTests.test_tab_restore_uses_exact_existing_names_and_storage_failure_is_safe"
   ],
   "test_core_log_render_js": [
@@ -1951,6 +1959,7 @@
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_actual_preview_packet_retains_valid_choices_and_clears_removed_values",
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_book_and_version_changes_refresh_options_and_keep_only_valid_choices",
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_deferred_preview_publication_requires_current_request_book_and_inputs",
+    "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_existing_upload_writes_are_serialized_and_only_latest_selection_publishes",
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_snapshot_modal_cancel_and_book_switch_send_no_requests",
     "tests.test_current_book_narrator_js.CurrentBookNarratorJsTests.test_upload_reuse_saved_book_acknowledgements_drive_names_not_display_text"
   ],
@@ -3672,6 +3681,7 @@
   ],
   "test_improvement_ui_errors_js": [
     "tests.test_improvement_ui_errors_js.ImprovementUiErrorTests.test_config_failure_is_visible_preserves_inputs_and_success_clears_retry",
+    "tests.test_improvement_ui_errors_js.ImprovementUiErrorTests.test_config_retry_confirms_draft_replacement_and_preserves_pending_edits",
     "tests.test_improvement_ui_errors_js.ImprovementUiErrorTests.test_sample_error_is_escaped_visible_cleared_on_retry_and_not_applied_to_other_project"
   ],
   "test_index_added_commit_lag": [
@@ -4284,7 +4294,7 @@
   ],
   "test_lmstudio_visible_poll_js": [
     "tests.test_lmstudio_visible_poll_js.LmStudioVisiblePollJsTests.test_foreground_poll_wiring_retains_immediate_and_explicit_refreshes",
-    "tests.test_lmstudio_visible_poll_js.LmStudioVisiblePollJsTests.test_tablet_navigation_stays_open_and_phone_selection_still_collapses"
+    "tests.test_lmstudio_visible_poll_js.LmStudioVisiblePollJsTests.test_navigation_collapses_below_large_breakpoint_and_desktop_stays_open"
   ],
   "test_local_audio_url_js": [
     "tests.test_local_audio_url_js.LocalAudioUrlTests.test_actual_handlers_preserve_raw_paths_and_cache_query",
@@ -5597,6 +5607,9 @@
     "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_actual_node_api_over_http_preserves_state_on_native_write_failure_then_commits",
     "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_all_saves_and_deletes_retain_cache_and_editor_text_on_failure",
     "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_delete_confirmation_cancellation_and_stale_editor_do_not_write",
+    "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_pass_default_name_is_reserved_and_existing_collision_is_preserved",
+    "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_preset_save_uses_edited_active_profile_and_preserves_inactive_profile",
+    "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_preview_only_publishes_current_request_and_editor",
     "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_save_controls_status_and_duplicate_submit_follow_shared_lock",
     "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_save_dialog_cancel_or_changed_prompt_cannot_write",
     "tests.test_prompt_preset_transactions_js.PromptPresetTransactionTests.test_successful_attribution_save_and_delete_publish_exact_payload_and_selection",
@@ -6675,6 +6688,9 @@
     "tests.test_script_dispatch_responsiveness.ScriptDispatchResponsivenessTests.test_cancelled_request_cannot_reserve_a_late_preflight_worker",
     "tests.test_script_dispatch_responsiveness.ScriptDispatchResponsivenessTests.test_single_and_batch_reject_same_unattested_narrator_without_state_mutation"
   ],
+  "test_script_picker_request_order_js": [
+    "tests.test_script_picker_request_order_js.ScriptPickerRequestOrderJsTests.test_newer_review_picker_and_independent_containers_own_their_replies"
+  ],
   "test_script_preflight": [
     "tests.test_script_preflight.MixedSourceCyrillicRepairTests.test_source_backed_cyrillic_survives_mixed_prose_but_ocr_and_introductions_stay_guarded",
     "tests.test_script_preflight.MixedSourceRepairRouteTests.test_native_preview_apply_preserves_mixed_source_word_and_refuses_introduced_word",
@@ -7404,7 +7420,8 @@
     "tests.test_task_outcomes_js.TaskOutcomeJsTests.test_all_three_recovery_callers_reject_zero_failure_and_negated_summaries",
     "tests.test_task_outcomes_js.TaskOutcomeJsTests.test_auto_pause_title_is_paused_and_notification_is_not_repeated",
     "tests.test_task_outcomes_js.TaskOutcomeJsTests.test_persona_completion_notifies_even_when_refresh_fails",
-    "tests.test_task_outcomes_js.TaskOutcomeJsTests.test_real_failures_incomplete_batches_and_errors_after_success_remain_visible"
+    "tests.test_task_outcomes_js.TaskOutcomeJsTests.test_real_failures_incomplete_batches_and_errors_after_success_remain_visible",
+    "tests.test_task_outcomes_js.TaskOutcomeJsTests.test_zero_error_summary_counts_are_neutral_without_masking_real_failures"
   ],
   "test_task_ownership_leases": [
     "tests.test_task_ownership_leases.TaskOwnershipLeaseTests.test_hard_process_death_releases_lease_without_deleting_or_aging_marker",
@@ -8112,6 +8129,7 @@
     "tests.test_ui_guidance_js.UiGuidanceJsTests.test_connection_check_does_not_claim_to_apply_or_save_settings",
     "tests.test_ui_guidance_js.UiGuidanceJsTests.test_generating_row_is_busy_and_becomes_actionable_when_complete",
     "tests.test_ui_guidance_js.UiGuidanceJsTests.test_key_visibility_preserves_value_and_theme_names_current_and_next",
+    "tests.test_ui_guidance_js.UiGuidanceJsTests.test_pending_auto_config_preserves_edits_and_ignores_older_requests",
     "tests.test_ui_guidance_js.UiGuidanceJsTests.test_prompt_preset_controls_disclose_setup_scope",
     "tests.test_ui_guidance_js.UiGuidanceJsTests.test_provider_heading_names_hidden_transport_gpu_and_reasoning_controls",
     "tests.test_ui_guidance_js.UiGuidanceJsTests.test_reload_cancel_is_noop_and_confirmation_reloads_once",
