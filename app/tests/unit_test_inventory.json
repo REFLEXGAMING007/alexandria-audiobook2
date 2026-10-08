@@ -3886,6 +3886,7 @@
     "tests.test_launcher_llama_assets.LauncherLlamaAssetTests.test_selected_build_commands_reach_uv_with_backend_and_constraints_in_native_bash",
     "tests.test_launcher_llama_assets.LauncherLlamaAssetTests.test_whisper_pins_are_shared_and_checked_before_any_build_or_success_notice",
     "tests.test_launcher_llama_assets.WhisperAssetVerificationTests.test_empty_truncated_and_tail_corrupted_model_bytes_are_rejected_and_preserved",
+    "tests.test_launcher_llama_assets.WhisperAssetVerificationTests.test_git_fsmonitor_timeout_stops_hook_without_accepting_unverified_assets",
     "tests.test_launcher_llama_assets.WhisperAssetVerificationTests.test_missing_model_fails_and_cli_exits_nonzero_on_corruption",
     "tests.test_launcher_llama_assets.WhisperAssetVerificationTests.test_valid_full_streamed_bytes_and_tracked_source_are_verified_without_mutation",
     "tests.test_launcher_llama_assets.WhisperAssetVerificationTests.test_wrong_commit_and_dirty_tracked_source_are_rejected_before_success"
@@ -5141,6 +5142,7 @@
   "test_pipeline_repeat_scoring": [
     "tests.test_pipeline_repeat_scoring.PipelineRepeatScoringTests.test_duplicate_gold_ids_fail_loudly_and_empty_population_is_explicit",
     "tests.test_pipeline_repeat_scoring.PipelineRepeatScoringTests.test_missing_duplicate_unnamed_merged_and_wrong_lines_are_in_denominator",
+    "tests.test_pipeline_repeat_scoring.PipelineRepeatScoringTests.test_missing_unreadable_or_partial_inputs_preserve_saved_scores_then_complete_retry_succeeds",
     "tests.test_pipeline_repeat_scoring.PipelineRepeatScoringTests.test_native_collect_and_standalone_reports_use_full_gold_population"
   ],
   "test_pitch_profile_matrix": [
@@ -6240,6 +6242,9 @@
     "tests.test_results_index_validation.ResultsIndexValidationTests.test_each_requested_record_must_be_in_both_indexes",
     "tests.test_results_index_validation.ResultsIndexValidationTests.test_only_exact_canonical_records_are_accepted",
     "tests.test_results_index_validation.ResultsIndexValidationTests.test_stage4_preserves_validation_error_type_and_stage7_stops_before_unit_gate"
+  ],
+  "test_results_utf8_inputs": [
+    "tests.test_results_utf8_inputs.ResultsUtf8InputTests.test_actual_collector_keeps_utf8_rows_under_simulated_cp1252_defaults"
   ],
   "test_resume_arm_arguments": [
     "tests.test_resume_arm_arguments.ResumeArmArgumentTests.test_allowed_separators_and_nonnegative_limits_reach_existing_admission",
@@ -8845,9 +8850,12 @@
     "tests.test_vram_synthetic_text.SyntheticTextTests.test_word_length_work_is_linear_for_large_custom_chunks"
   ],
   "test_watchdog_startup": [
+    "tests.test_watchdog_startup.WatchdogStartupTests.test_abort_takes_precedence_over_a_conflicting_completion_receipt",
+    "tests.test_watchdog_startup.WatchdogStartupTests.test_aborted_empty_run_never_publishes_completion_or_notifies_success",
     "tests.test_watchdog_startup.WatchdogStartupTests.test_already_running_session_can_finish_after_initial_observation",
     "tests.test_watchdog_startup.WatchdogStartupTests.test_delayed_session_is_observed_polled_and_marked_complete",
-    "tests.test_watchdog_startup.WatchdogStartupTests.test_session_never_observed_fails_without_completion_artifact"
+    "tests.test_watchdog_startup.WatchdogStartupTests.test_session_never_observed_fails_without_completion_artifact",
+    "tests.test_watchdog_startup.WatchdogStartupTests.test_zip_presence_or_old_observer_receipt_cannot_prove_runner_success"
   ],
   "test_wav_decoder": [
     "tests.test_wav_decoder.WavDecoderTests.test_float_wav_uses_container_format_without_invalid_decoder"
