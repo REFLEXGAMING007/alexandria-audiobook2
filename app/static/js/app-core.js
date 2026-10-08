@@ -4289,72 +4289,78 @@
         }
 
         async function loadVoices(refreshResources = true) {
-            await flushVoiceSaves();
-            const reuseResources = !refreshResources && performance.now() - _voiceResourcesRefreshedAt < 10000;
-            let resourcesComplete = true;
-            const refreshedResources = [];
-            const failedResources = [];
-            if (!reuseResources) { _voiceResourcesRefreshedAt = -Infinity; }
-            // Fetch independent lists together; render only after dropdowns and
-            // per-character cast counts are ready. Keep old optional lists on error.
-            const resources = reuseResources ? [] : [
-                ['_designedVoicesCache', '/api/voice_design/list', 'designed-voices'],
-                ['_cloneVoicesCache', '/api/clone_voices/list', 'clone-voices'],
-                ['_loraModelsCache', '/api/lora/models', 'lora-models'],
-            ].map(async ([key, path, label]) => {
-                try {
-                    const list = await API.get(path);
-                    if (!Array.isArray(list)) { throw new Error('Voice resource list is malformed'); }
-                    window[key] = list;
-                    refreshedResources.push(path);
+            if (!refreshResources && loadVoices.pending) { return loadVoices.pending; }
+            const loading = (async () => {
+                await flushVoiceSaves();
+                const reuseResources = !refreshResources && performance.now() - _voiceResourcesRefreshedAt < 10000;
+                let resourcesComplete = true;
+                const refreshedResources = [];
+                const failedResources = [];
+                if (!reuseResources) { _voiceResourcesRefreshedAt = -Infinity; }
+                // Fetch independent lists together; render only after dropdowns and
+                // per-character cast counts are ready. Keep old optional lists on error.
+                const resources = reuseResources ? [] : [
+                    ['_designedVoicesCache', '/api/voice_design/list', 'designed-voices'],
+                    ['_cloneVoicesCache', '/api/clone_voices/list', 'clone-voices'],
+                    ['_loraModelsCache', '/api/lora/models', 'lora-models'],
+                ].map(async ([key, path, label]) => {
+                    try {
+                        const list = await API.get(path);
+                        if (!Array.isArray(list)) { throw new Error('Voice resource list is malformed'); }
+                        window[key] = list;
+                        refreshedResources.push(path);
+                    }
+                    catch (e) { resourcesComplete = false; failedResources.push(path); console.debug(`${label} cache refresh failed`, e); }
+                });
+                const [voices] = await Promise.all([
+                    refreshVoiceMetadata(), ...resources,
+                    ...(reuseResources ? [] : [loadCastLibrary().catch(e => { resourcesComplete = false; failedResources.push('/api/voice_library'); console.debug('cast library refresh failed', e); })]),
+                ]);
+                if (!reuseResources) {
+                    _voiceResourcesRefreshedAt = resourcesComplete ? performance.now() : -Infinity;
                 }
-                catch (e) { resourcesComplete = false; failedResources.push(path); console.debug(`${label} cache refresh failed`, e); }
-            });
-            const [voices] = await Promise.all([
-                refreshVoiceMetadata(), ...resources,
-                ...(reuseResources ? [] : [loadCastLibrary().catch(e => { resourcesComplete = false; failedResources.push('/api/voice_library'); console.debug('cast library refresh failed', e); })]),
-            ]);
-            if (!reuseResources) {
-                _voiceResourcesRefreshedAt = resourcesComplete ? performance.now() : -Infinity;
-            }
-            if (reuseResources && _voiceCardsRevision === _voiceSaveSnapshot.revision
-                    && _voiceCardsBookToken === _voiceSaveSnapshot.book_token) {
-                return {refreshedResources, failedResources};
-            }
-            refreshVoicesScope();
-            const narrator = window._voicesByName.NARRATOR || window._voicesByName.Narrator;
-            const narratorSelect = document.getElementById('narrator-strategy');
-            if (narratorSelect && narrator?.config?.narrator_strategy) {
-                narratorSelect.value = narrator.config.narrator_strategy;
-            }
-            updateNarratorPreviewFields();
-            const container = document.getElementById('voices-list');
-            const focus = getVoiceListFocusSnapshot(container, _voiceCardsBookToken);
-            const panels = getVoicePanelSnapshot(container, _voiceCardsBookToken);
-            if (voices.length === 0) {
-                container.innerHTML = '<div class="alert alert-info">No voices found. Generate a script first.</div>';
+                if (reuseResources && _voiceCardsRevision === _voiceSaveSnapshot.revision
+                        && _voiceCardsBookToken === _voiceSaveSnapshot.book_token) {
+                    return {refreshedResources, failedResources};
+                }
+                refreshVoicesScope();
+                const narrator = window._voicesByName.NARRATOR || window._voicesByName.Narrator;
+                const narratorSelect = document.getElementById('narrator-strategy');
+                if (narratorSelect && narrator?.config?.narrator_strategy) {
+                    narratorSelect.value = narrator.config.narrator_strategy;
+                }
+                updateNarratorPreviewFields();
+                const container = document.getElementById('voices-list');
+                const focus = getVoiceListFocusSnapshot(container, _voiceCardsBookToken);
+                const panels = getVoicePanelSnapshot(container, _voiceCardsBookToken);
+                if (voices.length === 0) {
+                    container.innerHTML = '<div class="alert alert-info">No voices found. Generate a script first.</div>';
+                    _voiceCardsRevision = _voiceSaveSnapshot.revision;
+                    _voiceCardsBookToken = _voiceSaveSnapshot.book_token;
+                    return {refreshedResources, failedResources};
+                }
+                container.innerHTML = getVoiceSeedRepairMarkup(_voiceSaveSnapshot) + voices.map((v, i) => createVoiceCard(v, i)).join('');
                 _voiceCardsRevision = _voiceSaveSnapshot.revision;
                 _voiceCardsBookToken = _voiceSaveSnapshot.book_token;
+                renderReadyCount();
+                onToggleHideReady();
+
+                // If any voice has no saved config, save defaults immediately
+                if (!_voiceRecoveryDrafts.some(record => record.book_token === _voiceSaveSnapshot.book_token) && voices.some(v => !v.config || Object.keys(v.config).length === 0)) {
+                    saveVoicesDebounced();
+                }
+
+                // Restore any pending voice suggestions onto the freshly rendered cards
+                if (window._voiceSuggestions && Object.keys(window._voiceSuggestions).length) {
+                    renderVoiceSuggestions();
+                }
+                restoreVoicePanels(container, panels, _voiceCardsBookToken);
+                restoreVoiceListFocus(container, focus, _voiceCardsBookToken);
                 return {refreshedResources, failedResources};
-            }
-            container.innerHTML = getVoiceSeedRepairMarkup(_voiceSaveSnapshot) + voices.map((v, i) => createVoiceCard(v, i)).join('');
-            _voiceCardsRevision = _voiceSaveSnapshot.revision;
-            _voiceCardsBookToken = _voiceSaveSnapshot.book_token;
-            renderReadyCount();
-            onToggleHideReady();
-
-            // If any voice has no saved config, save defaults immediately
-            if (!_voiceRecoveryDrafts.some(record => record.book_token === _voiceSaveSnapshot.book_token) && voices.some(v => !v.config || Object.keys(v.config).length === 0)) {
-                saveVoicesDebounced();
-            }
-
-            // Restore any pending voice suggestions onto the freshly rendered cards
-            if (window._voiceSuggestions && Object.keys(window._voiceSuggestions).length) {
-                renderVoiceSuggestions();
-            }
-            restoreVoicePanels(container, panels, _voiceCardsBookToken);
-            restoreVoiceListFocus(container, focus, _voiceCardsBookToken);
-            return {refreshedResources, failedResources};
+            })();
+            loadVoices.pending = loading;
+            try { return await loading; }
+            finally { if (loadVoices.pending === loading) { loadVoices.pending = null; } }
         }
 
         window.selectVoiceVersion = async function selectVoiceVersion(select) {
@@ -7182,9 +7188,13 @@
             const file = input.files?.[0];
             input.value = '';
             if (!file) { return; }
+            const request = {};
+            window._chapterPresetImportRequest = request;
+            const isCurrent = () => window._chapterPresetImportRequest === request;
             if (file.size > 1048576) { showToast('Could not import presets: file exceeds the 1 MiB limit.', 'error'); return; }
             const reader = new FileReader();
             reader.onload = () => {
+                if (!isCurrent()) { return; }
                 try {
                     const imported = JSON.parse(reader.result);
                     if (!imported || typeof imported !== 'object' || Array.isArray(imported)) { throw new Error('expected an object'); }
@@ -7197,7 +7207,9 @@
                     showToast(`Imported ${Object.keys(valid).length} chapter preset(s).`, 'success');
                 } catch (e) { showActionError("Could not import presets", e, "Keep the preset file. Check that it contains valid chapter presets and that browser storage is available, then import again.", "error"); }
             };
-            reader.onerror = () => showToast('Could not import presets: file could not be read.', 'error');
+            reader.onerror = () => {
+                if (isCurrent()) { showToast('Could not import presets: file could not be read.', 'error'); }
+            };
             reader.readAsText(file);
         };
         renderChapterTemplatePresets();

@@ -86,24 +86,42 @@
 
         async function loadScript(name) {
             if (!await showConfirm(`Load "${name}"? This will replace your current script and chunks.`, {title: 'Replace active book?', actionLabel: 'Load book', danger: true})) { return; }
+            let request;
+            let loading;
+            const isCurrent = () => !request || loadScript.request === request;
             try {
                 await flushVoiceSaves();
                 if (!await ensureCastListEditsDiscardable()) { return; }
-                const loaded = await API.post('/api/scripts/load', { name });
-                applyCurrentBookFilename(`${loaded.name}.json`);
-                document.getElementById('cast-list-panel').style.display = 'none';
-                clearCastListEditor();
-                clearCharacterAliases();
-                resetDesignerForm();
-                showToast(`Script "${name}" loaded.`, 'success');
-                clearVoiceSuggestions();
-                await Promise.all([loadCharacterAliases(false), loadCastList(false), loadChunks(true)]);
-                await loadVoices();
-                loadSavedScripts();
-                loadDesignedVoices();
+                request = {};
+                loadScript.request = request;
+                const previous = loadScript.pending || Promise.resolve();
+                loading = (async () => {
+                    await previous.catch(() => {});
+                    if (!isCurrent()) { return; }
+                    const loaded = await API.post('/api/scripts/load', { name });
+                    if (!isCurrent()) { return; }
+                    applyCurrentBookFilename(`${loaded.name}.json`);
+                    document.getElementById('cast-list-panel').style.display = 'none';
+                    clearCastListEditor();
+                    clearCharacterAliases();
+                    resetDesignerForm();
+                    showToast(`Script "${name}" loaded.`, 'success');
+                    clearVoiceSuggestions();
+                    await Promise.all([loadCharacterAliases(false), loadCastList(false), loadChunks(true)]);
+                    if (!isCurrent()) { return; }
+                    await loadVoices();
+                    if (!isCurrent()) { return; }
+                    loadSavedScripts();
+                    loadDesignedVoices();
+                })();
+                loadScript.pending = loading;
+                await loading;
             } catch (e) {
+                if (!isCurrent()) { return; }
                 console.error('Error loading script:', e);
                 showActionError("Error loading script", e, "Check the currently loaded book before trying Load again; the load may have completed before its reply was lost.");
+            } finally {
+                if (loading && loadScript.pending === loading) { loadScript.pending = null; }
             }
         }
 
